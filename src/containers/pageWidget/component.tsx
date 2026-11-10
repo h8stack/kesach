@@ -3,15 +3,10 @@ import { useEffect, useRef, useState } from "react";
 import "./pageWidget.css";
 import { ConfigService } from "../../assets/lib/kookit-extra-browser.min";
 import { Trans } from "react-i18next";
-import { getBatchTrans, getWordDefinitions } from "../../utils/request/reader";
 import {
-  detectLocalLanguage,
-  getFullTranslationTarget,
   isFixedLayoutComic,
-  isRateLimitedResult,
   isReadingRawPDF,
 } from "../../utils/common";
-import toast from "react-hot-toast";
 import { isElectron } from "react-device-detect";
 import DatabaseService from "../../utils/storage/databaseService";
 import Note from "../../models/Note";
@@ -29,8 +24,6 @@ export interface PageWidgetState {
 
 declare var window: any;
 
-type TransCache = Record<string, Record<string, string>>;
-
 const PageWidget = () => {
   const currentBook = useAppStore((s) => s.book.currentBook);
   const currentChapter = useAppStore((s) => s.reader.currentChapter);
@@ -45,7 +38,6 @@ const PageWidget = () => {
   const textOrientation = useAppStore((s) => s.reader.textOrientation);
   const htmlBook = useAppStore((s) => s.reader.htmlBook);
   const isShowBookmark = useAppStore((s) => s.viewArea.isShowBookmark);
-  const isAuthed = useAppStore((s) => s.manager.isAuthed);
   const jumpPosition = useAppStore((s) => s.reader.jumpPosition);
   const handleJumpPosition = useAppStore((s) => s.handleJumpPosition);
   const handleFetchNotes = useAppStore((s) => s.handleFetchNotes);
@@ -70,174 +62,11 @@ const PageWidget = () => {
 
   const isFirst = useRef<Boolean>(true);
   const timeInterval = useRef<any>(null);
-  const lastBatchTranslationTriggerAt = useRef<number>(0);
-  const batchTranslationLock = useRef<Promise<any>>(Promise.resolve());
-  const transCacheMap = useRef<Map<string, TransCache>>(new Map());
-  const transCacheDirPath = useRef<string>("");
   const ignoreNextPageChange = useRef<boolean>(false);
 
   const setIgnoreNextPageChange = (value: boolean) => {
     ignoreNextPageChange.current = value;
     setState((prev) => ({ ...prev, ignoreNextPageChange: value }));
-  };
-
-  const getTransCachePath = (chapterDocIndex: string): string => {
-    const electron = window.electronAPI;
-    const dirPath = electron.sendSync("user-data", "ping");
-    const transDir = electron.path.join(dirPath, "trans");
-    if (!electron.fs.existsSync(transDir)) {
-      electron.fs.mkdirSync(transDir, { recursive: true });
-    }
-    transCacheDirPath.current = transDir;
-    return electron.path.join(
-      transDir,
-      currentBook.key + "_" + chapterDocIndex + ".json"
-    );
-  };
-
-  const getTransCache = (chapterDocIndex: string): TransCache => {
-    if (transCacheMap.current.has(chapterDocIndex)) {
-      return transCacheMap.current.get(chapterDocIndex)!;
-    }
-    let cache: TransCache = {};
-    if (isElectron && window.electronAPI && window.electronAPI.fs) {
-      try {
-        const cachePath = getTransCachePath(chapterDocIndex);
-        const fs = window.electronAPI.fs;
-        if (fs.existsSync(cachePath)) {
-          cache = JSON.parse(fs.readFileSync(cachePath, "utf-8")) || {};
-        }
-      } catch (error) {
-        console.error("Failed to load translation cache:", error);
-        cache = {};
-      }
-    }
-    transCacheMap.current.set(chapterDocIndex, cache);
-    return cache;
-  };
-
-  const saveTransCache = (chapterDocIndex: string, cache: TransCache) => {
-    if (!isElectron || !window.electronAPI || !window.electronAPI.fs) {
-      return;
-    }
-    try {
-      const cachePath = getTransCachePath(chapterDocIndex);
-      window.electronAPI.fs.writeFileSync(
-        cachePath,
-        JSON.stringify(cache),
-        "utf-8"
-      );
-    } catch (error) {
-      console.error("Failed to save translation cache:", error);
-    }
-  };
-
-  const handleBatchTranslation = async (rendition) => {
-    const prev = batchTranslationLock.current;
-    const next = prev.then(async () => {
-      if (
-        !ConfigService.getAllListConfig("fullTranslationBooks").includes(
-          currentBook.key
-        ) ||
-        ConfigService.getReaderConfig("fullTranslationMode") === "no" ||
-        !isAuthed
-      ) {
-        return;
-      }
-
-      let batchTransTexts: string[] = await rendition.getBatchTransTexts();
-      if (batchTransTexts && batchTransTexts.length > 0) {
-        let targetLang = getFullTranslationTarget();
-        let chapterDocIndex = "";
-        if (typeof rendition.getPosition === "function") {
-          chapterDocIndex = rendition.getPosition()?.chapterDocIndex || "";
-        }
-        if (!chapterDocIndex && rendition.tempLocation) {
-          chapterDocIndex = rendition.tempLocation.chapterDocIndex || "";
-        }
-        if (!chapterDocIndex) {
-          chapterDocIndex = "0";
-        }
-        let cache = getTransCache(chapterDocIndex);
-        let translatedTexts: string[] = new Array(batchTransTexts.length);
-        let pendingIndexes: number[] = [];
-        let pendingTexts: string[] = [];
-        batchTransTexts.forEach((text, index) => {
-          let cachedText = cache[targetLang] && cache[targetLang][text];
-          if (cachedText !== undefined) {
-            translatedTexts[index] = cachedText;
-          } else {
-            pendingIndexes.push(index);
-            pendingTexts.push(text);
-          }
-        });
-        if (pendingTexts.length > 0) {
-          let res = await getBatchTrans(pendingTexts, "Automatic", targetLang);
-          if (res && res.data && res.data.texts) {
-            pendingIndexes.forEach((index, i) => {
-              translatedTexts[index] = res.data.texts[i];
-              if (isRateLimitedResult(res.data.texts[i])) {
-                return;
-              }
-              if (!cache[targetLang]) {
-                cache[targetLang] = {};
-              }
-              cache[targetLang][batchTransTexts[index]] = res.data.texts[i];
-            });
-            saveTransCache(chapterDocIndex, cache);
-          }
-        }
-        if (translatedTexts.every((text) => text !== undefined)) {
-          rendition.handleBatchTransResult(batchTransTexts, translatedTexts);
-        }
-      }
-    });
-    batchTranslationLock.current = next.catch(() => {});
-    return next;
-  };
-
-  const handleWordDefinition = async (rendition) => {
-    const prev = batchTranslationLock.current;
-    const next = prev.then(async () => {
-      if (
-        !ConfigService.getAllListConfig("wordDefinitionBooks").includes(
-          currentBook.key
-        ) ||
-        !isAuthed
-      ) {
-        return;
-      }
-
-      let wordTexts = await rendition.audioText();
-      if (wordTexts && wordTexts.length > 0) {
-        let lang = detectLocalLanguage(wordTexts.slice(0, 500).join(" "));
-        if (lang === "ko") {
-          toast.error(
-            t(
-              "Unsupported language for word definition, currently only Chinese, Japanese and English are supported"
-            )
-          );
-          return;
-        }
-        let currentLevel =
-          lang === "zh"
-            ? ConfigService.getReaderConfig("currentChineseLevel") || "HSK3"
-            : lang === "ja"
-              ? ConfigService.getReaderConfig("currentJapaneseLevel") || "N3"
-              : ConfigService.getReaderConfig("currentEnglishLevel") || "四级";
-        let res = await getWordDefinitions(wordTexts, currentLevel, lang);
-
-        if (res && res.data && res.data.results) {
-          rendition.handleWordDefinitionResult(
-            res.data.results,
-            lang,
-            ConfigService.getReaderConfig("lang")
-          );
-        }
-      }
-    });
-    batchTranslationLock.current = next.catch(() => {});
-    return next;
   };
 
   const handlePageNum = async (rendition) => {
@@ -267,8 +96,6 @@ const PageWidget = () => {
   const methodsRef = useRef<any>(null);
   methodsRef.current = {
     handlePageNum,
-    handleBatchTranslation,
-    handleWordDefinition,
   };
 
   // componentDidMount + componentWillUnmount: 每分钟刷新一次时间
@@ -296,7 +123,6 @@ const PageWidget = () => {
         await methodsRef.current.handlePageNum(rendition);
         rendition.on("page-changed", async () => {
           await methodsRef.current.handlePageNum(rendition);
-          await methodsRef.current.handleBatchTranslation(rendition);
           if (ignoreNextPageChange.current) {
             setIgnoreNextPageChange(false);
           } else {
@@ -353,8 +179,6 @@ const PageWidget = () => {
         });
         rendition.on("rendered", async () => {
           await methodsRef.current.handlePageNum(rendition);
-          await methodsRef.current.handleBatchTranslation(rendition);
-          await methodsRef.current.handleWordDefinition(rendition);
         });
       })();
     }
@@ -473,7 +297,7 @@ const PageWidget = () => {
                   : {}
               }
             >
-              <Trans i18nKey="Book page" count={leftPage}>
+              <Trans i18nKey="Book/Document page" count={leftPage}>
                 Page
                 {{
                   count: leftPage,
@@ -483,7 +307,7 @@ const PageWidget = () => {
           )}
           {!isHideFooter && rightPage > 0 && !state.isSingle && (
             <p className="background-page-right">
-              <Trans i18nKey="Book page" count={rightPage}>
+              <Trans i18nKey="Book/Document page" count={rightPage}>
                 Page
                 {{
                   count: rightPage,

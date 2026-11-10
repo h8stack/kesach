@@ -9,7 +9,6 @@ import FontUtil, {
   translateFontName,
   translateFontStyle,
 } from "../../../utils/file/fontUtil";
-import { ChineseFonts, NonChineseFonts } from "../../../constants/fontConfig";
 import { applyCustomSystemFont } from "../../../utils/reader/launchUtil";
 import { useAppStore } from "../../../store/useAppStore";
 
@@ -27,14 +26,10 @@ export interface SettingInfoState {
   previewLoading: boolean;
   appFontKey: string;
   readerFontKey: string;
-  expandedFamily: string;
-  downloadingId: string;
-  downloadProgress: number;
 }
 
 const FontSetting = () => {
   const renderBookFunc = useAppStore((s) => s.book.renderBookFunc);
-  const isAuthed = useAppStore((s) => s.manager.isAuthed);
   const { t } = useTranslation();
   const [state, setState] = useState<SettingInfoState>(() => ({
     fonts: [],
@@ -44,9 +39,6 @@ const FontSetting = () => {
     previewLoading: false,
     appFontKey: ConfigService.getReaderConfig("systemFont") || "",
     readerFontKey: ConfigService.getReaderConfig("fontFamily") || "",
-    expandedFamily: "",
-    downloadingId: "",
-    downloadProgress: 0,
   }));
 
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -295,78 +287,6 @@ const FontSetting = () => {
     );
   };
 
-  const getFeaturedFontList = () => {
-    const lang = ConfigService.getReaderConfig("lang") || "";
-    return lang.startsWith("zh")
-      ? [...ChineseFonts, ...NonChineseFonts]
-      : [...NonChineseFonts, ...ChineseFonts];
-  };
-
-  const getFeaturedFamilies = () => {
-    const all = getFeaturedFontList();
-    const families: string[] = [];
-    all.forEach((font) => {
-      if (!families.includes(font.fontFamily)) {
-        families.push(font.fontFamily);
-      }
-    });
-    return families;
-  };
-
-  const handleToggleFamily = (family: string) => {
-    setState((prev) => ({
-      ...prev,
-      expandedFamily: prev.expandedFamily === family ? "" : family,
-    }));
-  };
-
-  const isFontInstalled = (fontId: string) => {
-    return FontUtil.getFontIds().includes(fontId);
-  };
-
-  const handleDownloadFeatured = async (font: {
-    id: string;
-    fontName: string;
-    style: string;
-    url: string;
-  }) => {
-    if (isFontInstalled(font.id)) {
-      toast.success(t("Font already downloaded"));
-      return;
-    }
-    if (stateRef.current.downloadingId) return;
-
-    setState((prev) => ({
-      ...prev,
-      downloadingId: font.id,
-      downloadProgress: 0,
-    }));
-    try {
-      const success = await FontUtil.downloadFeaturedFont(
-        font,
-        isAuthed,
-        (progress) => {
-          setState((prev) => ({ ...prev, downloadProgress: progress }));
-        }
-      );
-      if (success) {
-        await loadAllFonts();
-        toast.success(t("Download successful"));
-      } else {
-        toast.error(t("Download failed"));
-      }
-    } catch (err) {
-      console.error(err);
-      toast.error(t("Download failed"));
-    } finally {
-      setState((prev) => ({
-        ...prev,
-        downloadingId: "",
-        downloadProgress: 0,
-      }));
-    }
-  };
-
   const renderFontPreviewStyle = (fontKey: string, url: string) => {
     if (!url) return {};
     return {
@@ -386,99 +306,6 @@ const FontSetting = () => {
           src: url("${url}");
         }
       `}</style>
-    );
-  };
-
-  const renderFeaturedSection = () => {
-    const families = getFeaturedFamilies();
-    const allFonts = getFeaturedFontList();
-    const { expandedFamily, downloadingId, downloadProgress } = state;
-
-    return (
-      <div className="font-featured-section">
-        <div className="font-featured-section-title">
-          <Trans>Download featured fonts</Trans>
-        </div>
-        <div className="font-featured-list">
-          {families.map((family) => (
-            <div key={family} className="font-featured-family">
-              <div
-                className="font-featured-family-header"
-                onClick={() => handleToggleFamily(family)}
-              >
-                <span>{translateFontName(family, t)}</span>
-                <span
-                  className="icon-dropdown font-featured-family-icon"
-                  style={
-                    expandedFamily === family
-                      ? { transform: "rotate(180deg)" }
-                      : {}
-                  }
-                ></span>
-              </div>
-              {expandedFamily === family &&
-                allFonts
-                  .filter((f) => f.fontFamily === family)
-                  .map((font) => {
-                    const installed = isFontInstalled(font.id);
-                    const isDownloading = downloadingId === font.id;
-                    return (
-                      <div key={font.id} className="font-featured-variant">
-                        <div
-                          style={{
-                            display: "flex",
-                            alignItems: "center",
-                            justifyContent: "space-between",
-                            width: "100%",
-                          }}
-                        >
-                          <span>
-                            {translateFontName(font.fontName, t)}{" "}
-                            {translateFontStyle(font.style, t)}
-                          </span>
-                          {installed ? (
-                            <span
-                              style={{
-                                opacity: 0.5,
-                                fontSize: 13,
-                                padding: "4px 10px",
-                                borderRadius: 6,
-                                background: "transparent",
-                              }}
-                            >
-                              <Trans>Installed</Trans>
-                            </span>
-                          ) : (
-                            <button
-                              className="font-featured-download-btn"
-                              disabled={!!downloadingId && !isDownloading}
-                              onClick={() => handleDownloadFeatured(font)}
-                            >
-                              {isDownloading ? (
-                                <Trans>Downloading</Trans>
-                              ) : (
-                                <Trans>Download</Trans>
-                              )}
-                            </button>
-                          )}
-                        </div>
-                        {isDownloading && (
-                          <div className="font-featured-progress">
-                            <div
-                              className="font-featured-progress-bar"
-                              style={{
-                                width: `${Math.round(downloadProgress * 100)}%`,
-                              }}
-                            />
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-            </div>
-          ))}
-        </div>
-      </div>
     );
   };
 
@@ -525,8 +352,6 @@ const FontSetting = () => {
           ))
         )}
       </div>
-
-      {renderFeaturedSection()}
 
       <input
         ref={fileInputRef}

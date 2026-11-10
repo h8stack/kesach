@@ -52,7 +52,6 @@ const BookListItem: React.FC<BookItemProps> = (props) => {
     setIsHover,
     cover,
     isCoverExist,
-    isBookOffline,
     isDropTarget,
     handleJump,
     handleSelectIconClick,
@@ -210,9 +209,6 @@ const BookListItem: React.FC<BookItemProps> = (props) => {
         >
           <div className="book-item-list-subtitle">
             <div className="book-item-list-subtitle-text">
-              {!isBookOffline && (
-                <span className="icon-cloud book-download-action"></span>
-              )}
               {(isFavoriteBook() || isTopBook()) && (
                 <span className="book-item-list-status">
                   {isFavoriteBook() && (

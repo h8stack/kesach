@@ -97,7 +97,7 @@ const SortDialog = () => {
         <ul className="sort-by-category">
           {[
             "Recently read",
-            "Book name",
+            "Book/Document name",
             "Sort by Date",
             "Reading duration",
             "Author name",

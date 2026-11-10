@@ -330,7 +330,7 @@ const Stats = () => {
     {
       icon: "icon-bookshelf",
       value: totalBooks,
-      label: t("Books read"),
+      label: t("Books/Documents read"),
       color: textColor,
       iconSize: 24,
     },

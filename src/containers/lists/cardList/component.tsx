@@ -157,7 +157,7 @@ const CardList = (props: CardListProps) => {
       }
     }
     if (!book) {
-      toast(t("Book not exists"));
+      toast(t("Book/Document not exists"));
       return;
     }
 
@@ -278,7 +278,7 @@ const CardList = (props: CardListProps) => {
                     top: "2px",
                   }}
                   onClick={() => {
-                    const link = `koodo-reader://open-note?noteKey=${item.key}`;
+                    const link = `kesach://open-note?noteKey=${item.key}`;
                     navigator.clipboard.writeText(link).then(() => {
                       toast(t("Copied"));
                     });

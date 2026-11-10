@@ -20,7 +20,7 @@ export const generalSettingList = [
   {
     isElectron: true,
     title: "Disable screen blanking",
-    desc: "When Koodo is running, your computer won't enter sleep mode",
+    desc: "When KeSach is running, your computer won't enter sleep mode",
     propName: "isPreventSleep",
   },
   {
@@ -48,14 +48,14 @@ export const generalSettingList = [
   {
     isElectron: true,
     title: "Open book without adding it to library",
-    desc: "When opening books in the file manager with Koodo, the opened books won't be added to the library",
+    desc: "When opening books in the file manager with KeSach, the opened books won't be added to the library",
     propName: "isPreventAdd",
   },
 
   {
     isElectron: false,
     title: "Auto precache books after import",
-    desc: "Pre-cache books after import to increase opening speed, Koodo will generate a precache version of the original book and save it into your library",
+    desc: "Pre-cache books after import to increase opening speed, KeSach will generate a precache version of the original book and save it into your library",
     propName: "isPrecacheBook",
   },
   {
@@ -65,24 +65,8 @@ export const generalSettingList = [
   },
   {
     isElectron: false,
-    title: "Disable AI features",
-    propName: "isDisableAI",
-  },
-  {
-    isElectron: false,
     title: "Use file name as book title",
     propName: "isUseOriginalName",
-  },
-  {
-    isElectron: false,
-    title: "Recognize book title and author with AI on import",
-    desc: "When importing books, if no book title is parsed from the book metadata, AI will be used to recognize the book title and author",
-    propName: "isAIAnalyzeTitle",
-  },
-  {
-    isElectron: true,
-    title: "Disable update notification",
-    propName: "isDisableUpdate",
   },
   {
     isElectron: true,
@@ -117,241 +101,6 @@ export const appearanceSettingList = [
     isElectron: false,
     title: "Show number of books in each shelf",
     propName: "isShowShelfBookCount",
-  },
-];
-export const dataSettingList = [
-  {
-    isElectron: true,
-    title: "Enable Discord Rich Presence",
-    desc: "Show your reading status and the book your're reading on your Discord profile. Discord needs to be running on your computer",
-    propName: "isEnableDiscordRPC",
-  },
-  {
-    isElectron: false,
-    title: "Auto sync reading progress with KOReader",
-    desc: "Clicking the sync button will sync reading progress between Koodo Reader and KOReader with KOReader sync server.",
-    propName: "isEnableKoReaderSync",
-  },
-];
-export const noteSyncSettingList = [
-  {
-    isElectron: false,
-    title: "Auto sync notes and highlights to Notion",
-    desc: "",
-    propName: "isEnableNotionSync",
-    requiresAuth: true,
-    authFields: [
-      {
-        key: "token",
-        label: "Notion Personal Access Token",
-        placeholder: "Enter your Notion personal access token",
-      },
-      {
-        key: "databaseId",
-        label: "Notion Database ID",
-        placeholder: "Enter the ID of the Notion database to sync to",
-      },
-    ],
-    authConfigKey: "notionSyncConfig",
-  },
-  {
-    isElectron: false,
-    title: "Auto sync notes and highlights to Yuque",
-    desc: "",
-    propName: "isEnableYuqueSync",
-    requiresAuth: true,
-    authFields: [
-      {
-        key: "token",
-        label: "Yuque Token",
-        placeholder: "Enter your Yuque personal access token",
-      },
-      {
-        key: "namespace",
-        label: "Yuque Namespace",
-        placeholder: "Enter namespace, e.g. username/repo-slug",
-      },
-    ],
-    authConfigKey: "yuqueSyncConfig",
-  },
-  {
-    isElectron: false,
-    title: "Auto sync notes and highlights to Readwise",
-    desc: "",
-    propName: "isEnableReadwiseSync",
-    requiresAuth: true,
-    authFields: [
-      {
-        key: "accessToken",
-        label: "Readwise Access Token",
-        placeholder: "Enter your Readwise access token",
-      },
-    ],
-    authConfigKey: "readwiseSyncConfig",
-  },
-  {
-    isElectron: false,
-    title: "Auto sync notes and highlights to SiYuan",
-    desc: "Please enable network serving in SiYuan - Settings - About, and make sure SiYuan is running when syncing",
-    propName: "isEnableSiYuanSync",
-    requiresAuth: true,
-    authFields: [
-      {
-        key: "serverUrl",
-        label: "SiYuan Server URL",
-        placeholder: "e.g. http://127.0.0.1:6806",
-      },
-      {
-        key: "token",
-        label: "SiYuan API Token",
-        placeholder: "Enter your SiYuan API token",
-      },
-    ],
-    authConfigKey: "siyuanSyncConfig",
-  },
-  //// due to potential legal issues, we decide to remove the IMA sync for now, we will consider adding it back in the future when this issue is resolved
-  // {
-  //   isElectron: false,
-  //   title: "Auto sync notes and highlights to IMA",
-  //   desc: "",
-  //   propName: "isEnableImaSync",
-  //   requiresAuth: true,
-  //   authFields: [
-  //     {
-  //       key: "apiKey",
-  //       label: "IMA API Key",
-  //       placeholder: "Enter your IMA API key",
-  //     },
-  //     {
-  //       key: "clientId",
-  //       label: "IMA Client ID",
-  //       placeholder: "Enter your IMA Client ID",
-  //     },
-  //   ],
-  //   authConfigKey: "imaSyncConfig",
-  // },
-  {
-    isElectron: true,
-    title: "Auto sync notes and highlights to local markdown files",
-    desc: "Suitable for Obsidian, Joplin and other markdown-based note-taking apps. Each book will be a separate markdown file named 'Book Name.md' in the specified folder. ",
-    propName: "isEnableMarkdownSync",
-    requiresAuth: true,
-    authFields: [
-      {
-        key: "folder",
-        label: "Markdown Sync Folder",
-        placeholder: "Enter the folder path to save markdown files",
-      },
-    ],
-    authConfigKey: "markdownSyncConfig",
-  },
-];
-export const wordSyncSettingList = [
-  {
-    isElectron: false,
-    title: "Auto sync new words to Eudic",
-    desc: "When you look up a word, it will be automatically synced to your Eudic study list",
-    propName: "isEnableEudicSync",
-    requiresAuth: true,
-    authFields: [
-      {
-        key: "accessToken",
-        label: "Eudic Access Token",
-        placeholder: "Enter your Eudic NIS access token",
-      },
-      {
-        key: "categoryName",
-        label: "Eudic Study List Name",
-        placeholder: "Enter the study list name",
-      },
-      {
-        key: "language",
-        label: "Eudic Language",
-        placeholder: "Language code, e.g. en / fr / de / es",
-      },
-    ],
-    authConfigKey: "eudicSyncConfig",
-  },
-  {
-    isElectron: false,
-    title: "Auto sync new words to AnkiConnect",
-    desc: "When you look up a word, it will be automatically added to an Anki deck via AnkiConnect (must be running locally)",
-    propName: "isEnableAnkiSync",
-    requiresAuth: true,
-    authFields: [
-      {
-        key: "host",
-        label: "Host",
-        placeholder: "e.g. 127.0.0.1",
-      },
-      {
-        key: "port",
-        label: "Port",
-        placeholder: "e.g. 8765",
-      },
-      {
-        key: "apiKey",
-        label: "Key",
-        placeholder: "Api key",
-      },
-      {
-        key: "deckName",
-        label: "Deck Name",
-        placeholder: "e.g. Vocabulary",
-      },
-    ],
-    authConfigKey: "ankiSyncConfig",
-  },
-  {
-    isElectron: false,
-    title: "Auto sync new words to MaiMemo",
-    desc: "When you look up a word, it will be automatically synced to your MaiMemo notepad",
-    propName: "isEnableMaiMemoSync",
-    requiresAuth: true,
-    authFields: [
-      {
-        key: "accessToken",
-        label: "MaiMemo Access Token",
-        placeholder: "Enter your MaiMemo access token",
-      },
-      {
-        key: "notepadName",
-        label: "MaiMemo Notepad Name",
-        placeholder: "Enter the notepad name",
-      },
-    ],
-    authConfigKey: "maimemoSyncConfig",
-  },
-];
-export const syncSettingList = [
-  {
-    isElectron: false,
-    title: "Disable automatic sync",
-    desc: "By default, Koodo Reader will automatically synchronize your data when you open the app and exit reading",
-    propName: "isDisableAutoSync",
-  },
-  {
-    isElectron: false,
-    title: "Auto download cloud books",
-    desc: "To reduce storage usage, only the book metadata is downloaded by default, and the book files are not downloaded. After enabling this option, all book files will be downloaded during synchronization",
-    propName: "autoOffline",
-  },
-  {
-    isElectron: false,
-    title: "Enable Koodo Sync",
-    desc: "Enable this option to increase synchronization speed. Your reading progress, notes, highlights, bookmarks, and other reading-related data will be encrypted, stored and synced via our cloud service, your books and covers will still be synced by your added data sources. Turning off this option will remove the above data from our cloud.",
-    propName: "isEnableKoodoSync",
-  },
-  {
-    isElectron: false,
-    title: "Always keep local data when resolving sync conflicts",
-    desc: "If you update a piece of data that has already been deleted in the cloud before synchronization, it will cause a conflict. In this case, we will keep the cloud data by default. If you turn this option on, we will keep the local data",
-    propName: "isKeepLocal",
-  },
-  {
-    isElectron: false,
-    title: "Hide sync progress bar when syncing",
-    propName: "hideSyncProgress",
   },
 ];
 export const readingSettingList = [
@@ -406,7 +155,7 @@ export const readingSettingList = [
   {
     isElectron: false,
     title: "No popup when selecting texts",
-    desc: "Turn it on when you want Koodo to work with other third-party translation service, right clicking on the selected text will trigger popup again",
+    desc: "Turn it on when you want KeSach to work with other third-party translation service, right clicking on the selected text will trigger popup again",
     propName: "isDisablePopup",
   },
   {

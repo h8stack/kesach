@@ -29,9 +29,6 @@ export interface SettingInfoState {
 declare var window: any;
 
 const ReadingSetting = () => {
-  const isAuthed = useAppStore((s) => s.manager.isAuthed);
-  const handleSetting = useAppStore((s) => s.handleSetting);
-  const handleSettingMode = useAppStore((s) => s.handleSettingMode);
   const handleMergeWord = useAppStore((s) => s.handleMergeWord);
   const { t } = useTranslation();
   const [state, setState] = useState<Record<string, boolean>>({
@@ -61,12 +58,6 @@ const ReadingSetting = () => {
   };
 
   const handleToggleSetting = (stateName: string) => {
-    if (stateName === "isLemmatizeWord" && !isAuthed) {
-      toast.error(t("Please upgrade to Pro to use this feature"));
-      handleSetting(true);
-      handleSettingMode("account");
-      return;
-    }
     setState((prev) => ({ ...prev, [stateName]: !prev[stateName] }));
     ConfigService.setReaderConfig(stateName, state[stateName] ? "no" : "yes");
     handleRest(state[stateName]);

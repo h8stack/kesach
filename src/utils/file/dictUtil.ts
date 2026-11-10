@@ -4,13 +4,6 @@ import { ConfigService } from "../../assets/lib/kookit-extra-browser.min";
 import toast from "react-hot-toast";
 import i18n from "../../i18n";
 
-export interface CloudDictItem {
-  id: string;
-  name: string;
-  translation: string;
-  source: string;
-}
-
 export type DictKind =
   | "mdict"
   | "stardict"
@@ -236,87 +229,6 @@ class DictUtil {
     ConfigService.deleteListConfig(id, "dictList");
   }
 
-  /** Pick display name of a cloud dict according to current language */
-  static getCloudDictDisplayName(dict: CloudDictItem): string {
-    const lang = i18n.language || "";
-    return lang.startsWith("zh") ? dict.translation : dict.name;
-  }
-
-  /** Build download url of a cloud dict */
-  static getCloudDictUrl(dictId: string, _isAuthed: boolean): string {
-    const base = "https://storage.koodoreader.com";
-    return `${base}/dicts/${dictId}.mdx`;
-  }
-
-  /** Download a cloud dict with progress, then import it locally. */
-  static async downloadCloudDict(
-    dict: CloudDictItem,
-    isAuthed: boolean,
-    onProgress?: (progress: number) => void
-  ): Promise<boolean> {
-    const url = this.getCloudDictUrl(dict.id, isAuthed);
-    const response = await fetch(url, {
-      headers: {
-        "Cache-Control": "no-transform",
-        "Accept-Encoding": "identity",
-      },
-    });
-    if (!response.ok) return false;
-
-    const contentLength = Number(response.headers.get("Content-Length") || 0);
-    const reader = response.body?.getReader();
-    if (!reader) {
-      const buffer = await response.arrayBuffer();
-      return await this.saveDownloadedDict(dict, buffer);
-    }
-
-    const chunks: Uint8Array[] = [];
-    let received = 0;
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      if (value) {
-        chunks.push(value);
-        received += value.length;
-        if (contentLength > 0 && onProgress) {
-          onProgress(received / contentLength);
-        }
-      }
-    }
-
-    const buffer = new Uint8Array(received);
-    let offset = 0;
-    for (const chunk of chunks) {
-      buffer.set(chunk, offset);
-      offset += chunk.length;
-    }
-
-    return await this.saveDownloadedDict(dict, buffer.buffer);
-  }
-
-  private static async saveDownloadedDict(
-    dict: CloudDictItem,
-    arrayBuffer: ArrayBuffer
-  ): Promise<boolean> {
-    if (!isElectron) return false;
-    try {
-      const result = await this.invoke<{ ok: boolean; dict?: DictMeta }>(
-        "dict-import-buffer",
-        {
-          id: dict.id,
-          name: this.getCloudDictDisplayName(dict),
-          extension: "mdx",
-          buffer: arrayBuffer,
-        }
-      );
-      if (!result?.ok || !result.dict) return false;
-      this.persistDict(result.dict);
-      return true;
-    } catch (error) {
-      console.error("Failed to save downloaded dictionary:", error);
-      return false;
-    }
-  }
 }
 
 export default DictUtil;

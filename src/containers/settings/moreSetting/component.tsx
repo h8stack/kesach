@@ -16,7 +16,6 @@ import {
 } from "../../../utils/reader/protectionUtil";
 import { vexPasswordInputAsync, vexSelectAsync } from "../../../utils/common";
 import i18n from "../../../i18n";
-import { isElectron } from "react-device-detect";
 import TokenService from "../../../utils/storage/tokenService";
 import SwitchRow from "../../../components/readerSettings/switchRow";
 
@@ -27,14 +26,6 @@ export interface MoreSettingState {
   pinValue: string;
   pinFirstValue: string;
   pinCallback: ((pin: string | false) => void) | null;
-  proxyEnabled: boolean;
-  proxyType: "none" | "http" | "socks5";
-  proxyHost: string;
-  proxyPort: string;
-  proxyUsername: string;
-  proxyPassword: string;
-  isTestingProxy: boolean;
-  proxyEditing: boolean;
 }
 
 const MoreSetting = () => {
@@ -46,14 +37,6 @@ const MoreSetting = () => {
     pinValue: "",
     pinFirstValue: "",
     pinCallback: null,
-    proxyEnabled: false,
-    proxyType: "none",
-    proxyHost: "",
-    proxyPort: "",
-    proxyUsername: "",
-    proxyPassword: "",
-    isTestingProxy: false,
-    proxyEditing: false,
   });
   const stateRef = useLatest(state);
 
@@ -72,20 +55,6 @@ const MoreSetting = () => {
         biometricAvailable: biometricCapability.available,
       });
     });
-    if (window.electronAPI) {
-      const ipcRenderer = window.electronAPI;
-      ipcRenderer.invoke("get-proxy-config").then((cfg: any) => {
-        if (!cfg) return;
-        updateState({
-          proxyEnabled: cfg.enabled && cfg.type !== "none",
-          proxyType: cfg.type || "none",
-          proxyHost: cfg.host || "",
-          proxyPort: cfg.port ? String(cfg.port) : "",
-          proxyUsername: cfg.username || "",
-          proxyPassword: cfg.password || "",
-        });
-      });
-    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -252,138 +221,6 @@ const MoreSetting = () => {
     }
   };
 
-  const handleToggleProxy = () => {
-    if (stateRef.current.proxyEnabled) {
-      updateState({
-        proxyEnabled: false,
-        proxyType: "none",
-        proxyHost: "",
-        proxyPort: "",
-        proxyUsername: "",
-        proxyPassword: "",
-        proxyEditing: false,
-      });
-      if (window.electronAPI) {
-        const ipcRenderer = window.electronAPI;
-        ipcRenderer.invoke("set-proxy-config", {
-          enabled: false,
-          type: "none",
-          host: "",
-          port: 0,
-          username: "",
-          password: "",
-        });
-      }
-      toast.success(t("Change successful"));
-      return;
-    }
-    updateState({
-      proxyEnabled: true,
-      proxyType: "http",
-      proxyHost: "",
-      proxyPort: "",
-      proxyUsername: "",
-      proxyPassword: "",
-      proxyEditing: true,
-    });
-  };
-
-  const handleChangeProxyType = (newType: "http" | "socks5") => {
-    if (newType === stateRef.current.proxyType) return;
-    updateState({
-      proxyType: newType,
-      proxyHost: "",
-      proxyPort: "",
-      proxyUsername: "",
-      proxyPassword: "",
-      proxyEditing: true,
-    });
-  };
-
-  const handleTestConnection = async () => {
-    const { proxyType, proxyHost, proxyPort, proxyUsername, proxyPassword } =
-      stateRef.current;
-    if (!proxyHost || !proxyPort) {
-      toast.error(t("Please enter host and port"));
-      return;
-    }
-    const portNum = parseInt(proxyPort);
-    if (isNaN(portNum) || portNum < 1 || portNum > 65535) {
-      toast.error(t("Please enter host and port"));
-      return;
-    }
-    if (!window.electronAPI) return;
-    const ipcRenderer = window.electronAPI;
-    updateState({ isTestingProxy: true });
-    toast.loading(t("Testing connection..."), {
-      id: "proxy-test-id",
-    });
-    try {
-      const res = await ipcRenderer.invoke("test-proxy-connection", {
-        type: proxyType,
-        host: proxyHost,
-        port: portNum,
-        username: proxyUsername,
-        password: proxyPassword,
-      });
-      if (res && res.ok) {
-        toast.success(
-          t("Connection successful") + ` (${res.elapsedMs}ms)`,
-          { id: "proxy-test-id" }
-        );
-      } else {
-        toast.error(
-          t("Connection failed") + `: ${res?.reason || res?.detail || ""}`,
-          { id: "proxy-test-id" }
-        );
-      }
-    } catch (e) {
-      toast.error(t("Connection failed"), { id: "proxy-test-id" });
-    } finally {
-      updateState({ isTestingProxy: false });
-    }
-  };
-
-  const handleSaveProxyConfig = async () => {
-    const {
-      proxyEnabled,
-      proxyType,
-      proxyHost,
-      proxyPort,
-      proxyUsername,
-      proxyPassword,
-    } = stateRef.current;
-    if (!proxyHost || !proxyPort) {
-      toast.error(t("Please enter host and port"));
-      return;
-    }
-    const portNum = parseInt(proxyPort);
-    if (isNaN(portNum) || portNum < 1 || portNum > 65535) {
-      toast.error(t("Please enter host and port"));
-      return;
-    }
-    if (!window.electronAPI) return;
-    const ipcRenderer = window.electronAPI;
-    try {
-      const res = await ipcRenderer.invoke("set-proxy-config", {
-        enabled: proxyEnabled,
-        type: proxyType,
-        host: proxyHost,
-        port: portNum,
-        username: proxyUsername,
-        password: proxyPassword,
-      });
-      if (res && res.ok) {
-        updateState({ proxyEditing: false });
-        toast.success(t("Added successfully"));
-      } else {
-        toast.error(t("Save failed"));
-      }
-    } catch (e) {
-      toast.error(t("Save failed"));
-    }
-  };
-
   const renderPinKeypad = () => {
     const { pinInputMode, pinValue } = state;
     if (pinInputMode === "none") return null;
@@ -460,23 +297,10 @@ const MoreSetting = () => {
     );
   };
 
-  const {
-    protectionMethod,
-    biometricAvailable,
-    proxyEnabled,
-    proxyType,
-    proxyHost,
-    proxyPort,
-    proxyUsername,
-    proxyPassword,
-    isTestingProxy,
-    proxyEditing,
-  } = state;
+  const { protectionMethod, biometricAvailable } = state;
   const isEnabled = !!protectionMethod;
   const showBiometricOption =
     biometricAvailable || protectionMethod === "biometric";
-  const showSocksAuthWarning =
-    proxyType === "socks5" && (proxyUsername || proxyPassword);
 
   return (
     <>
@@ -521,160 +345,6 @@ const MoreSetting = () => {
               <Trans>Use Touch ID or Windows Hello to protect the app</Trans>
             )}
           </p>
-        </>
-      )}
-      {isElectron && (
-        <>
-          <SwitchRow
-            variant="setting"
-            title={<Trans>Network proxy</Trans>}
-            isEnabled={proxyEnabled}
-            onClick={handleToggleProxy}
-          />
-          <p className="setting-option-subtitle">
-            <Trans>Route all network requests through a proxy</Trans>
-          </p>
-        </>
-      )}
-
-      {proxyEnabled && (
-        <>
-          <div className="setting-dialog-new-title" key="proxy-type">
-            <Trans>Proxy type</Trans>
-            <select
-              className="lang-setting-dropdown"
-              value={proxyType}
-              onChange={(e) =>
-                handleChangeProxyType(e.target.value as "http" | "socks5")
-              }
-              style={{ textAlign: "left" }}
-            >
-              <option value="http">HTTP</option>
-              <option value="socks5">SOCKS5</option>
-            </select>
-          </div>
-          {proxyEditing && (
-            <div
-              style={{
-                marginLeft: "25px",
-                marginRight: "25px",
-              }}
-            >
-              <div key="proxy-host">
-                <input
-                  className="token-dialog-username-box"
-                  value={proxyHost}
-                  onChange={(e) => updateState({ proxyHost: e.target.value })}
-                  placeholder={t("Proxy host")}
-                />
-              </div>
-              <div
-                style={{
-                  marginTop: "5px",
-                  marginBottom: "2px",
-                  marginLeft: "2px",
-                  fontSize: "12px",
-                  opacity: 0.8,
-                }}
-              >
-                {t("Example")}: {"127.0.0.1"}
-              </div>
-              <div key="proxy-port">
-                <input
-                  className="token-dialog-username-box"
-                  type="number"
-                  value={proxyPort}
-                  onChange={(e) => updateState({ proxyPort: e.target.value })}
-                  placeholder={t("Proxy port")}
-                />
-              </div>
-              <div
-                style={{
-                  marginTop: "5px",
-                  marginBottom: "2px",
-                  marginLeft: "2px",
-                  fontSize: "12px",
-                  opacity: 0.8,
-                }}
-              >
-                {t("Example")}: {"1080"}
-              </div>
-              <div key="proxy-username">
-                <input
-                  className="token-dialog-username-box"
-                  value={proxyUsername}
-                  onChange={(e) =>
-                    updateState({ proxyUsername: e.target.value })
-                  }
-                  placeholder={
-                    t("Proxy username") +
-                    " (" +
-                    t("Optional") +
-                    ")"
-                  }
-                />
-              </div>
-              <div key="proxy-password">
-                <input
-                  className="token-dialog-username-box"
-                  type="password"
-                  value={proxyPassword}
-                  onChange={(e) =>
-                    updateState({ proxyPassword: e.target.value })
-                  }
-                  placeholder={
-                    t("Proxy password") +
-                    " (" +
-                    t("Optional") +
-                    ")"
-                  }
-                />
-              </div>
-              {showSocksAuthWarning && (
-                <p
-                  className="setting-option-subtitle"
-                  style={{ color: "#d6732d" }}
-                >
-                  <Trans>
-                    SOCKS5 authentication is not supported for in-app requests;
-                    use HTTP proxy instead
-                  </Trans>
-                </p>
-              )}
-              <div
-                className="setting-dialog-new-title"
-                key="proxy-actions"
-                style={{
-                  display: "flex",
-                  gap: "8px",
-                  margin: "0px",
-                  marginTop: "20px",
-                  width: "100%",
-                }}
-              >
-                <div
-                  className="voice-add-confirm"
-                  style={{
-                    marginRight: "0px",
-                  }}
-                  onClick={handleTestConnection}
-                >
-                  {isTestingProxy
-                    ? t("Testing connection...")
-                    : t("Test connection")}
-                </div>
-                <div
-                  className="voice-add-confirm"
-                  style={{
-                    marginRight: "0px",
-                  }}
-                  onClick={handleSaveProxyConfig}
-                >
-                  {t("Save")}
-                </div>
-              </div>
-            </div>
-          )}
         </>
       )}
     </>

@@ -376,7 +376,7 @@ const NavigationPanel = (props: NavigationPanelProps) => {
               className="navigation-search-title"
               style={{ height: "20px", margin: "0px 25px 13px" }}
             >
-              <Trans>Search in the Book</Trans>
+              <Trans>Search in the Book/Document</Trans>
             </div>
             <SearchBox {...(searchProps as any)} />
           </div>

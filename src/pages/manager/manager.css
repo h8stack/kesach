@@ -28,6 +28,14 @@
   left: 0px;
   z-index: 9;
 }
+/* The overlay stays mounted to catch drops, but must not swallow normal
+   clicks on book cards, shelves and dialogs. */
+.manager .drag-background {
+  pointer-events: none;
+}
+.manager .drag-background.drag-active {
+  pointer-events: auto;
+}
 .drag-info {
   position: absolute;
   top: 50%;

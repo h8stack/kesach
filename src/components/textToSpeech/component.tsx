@@ -22,8 +22,6 @@ import TTSUtil from "../../utils/reader/ttsUtil";
 import { getTextRules } from "../../utils/common";
 import "./textToSpeech.css";
 import SwitchRow from "../readerSettings/switchRow";
-import { fetchUserInfo } from "../../utils/request/user";
-import { getSplitSentence } from "../../utils/request/reader";
 import { Howl } from "howler";
 import { useAppStore } from "../../store/useAppStore";
 
@@ -34,16 +32,6 @@ export interface TextToSpeechState {
   voiceLocale: string;
   languageList: string[];
   voiceList: any;
-  multiRoleEnabled: boolean;
-  multiRoleVoiceType: string;
-  multiRoleNarratorVoice: string;
-  multiRoleMaleVoice: string;
-  multiRoleFemaleVoice: string;
-  multiRoleNarratorEngine: string;
-  multiRoleMaleEngine: string;
-  multiRoleFemaleEngine: string;
-  multiRoleChildVoice: string;
-  multiRoleChildEngine: string;
 }
 
 declare var window: any;
@@ -53,7 +41,6 @@ const TextToSpeech = () => {
   const isReading = useAppStore((s) => s.book.isReading);
   const plugins = useAppStore((s) => s.manager.plugins);
   const readerMode = useAppStore((s) => s.reader.readerMode);
-  const isAuthed = useAppStore((s) => s.manager.isAuthed);
   const speechStartText = useAppStore((s) => s.reader.speechStartText);
   const isSpeechAutoStart = useAppStore((s) => s.reader.isSpeechAutoStart);
   const handleSetting = useAppStore((s) => s.handleSetting);
@@ -70,35 +57,6 @@ const TextToSpeech = () => {
     voiceList: {},
     voiceLocale:
       ConfigService.getReaderConfig("voiceLocale") || navigator.language,
-    multiRoleEnabled: ConfigService.getAllListConfig(
-      "multiRoleVoiceBooks"
-    ).includes(currentBook?.key),
-    multiRoleVoiceType:
-      ConfigService.getReaderConfig("multiRoleVoiceType") || "system",
-    multiRoleNarratorVoice:
-      ConfigService.getReaderConfig("multiRoleNarratorVoice") ||
-      ConfigService.getReaderConfig("voiceName"),
-    multiRoleMaleVoice:
-      ConfigService.getReaderConfig("multiRoleMaleVoice") ||
-      ConfigService.getReaderConfig("voiceName"),
-    multiRoleFemaleVoice:
-      ConfigService.getReaderConfig("multiRoleFemaleVoice") ||
-      ConfigService.getReaderConfig("voiceName"),
-    multiRoleNarratorEngine:
-      ConfigService.getReaderConfig("multiRoleNarratorEngine") ||
-      ConfigService.getReaderConfig("voiceEngine"),
-    multiRoleMaleEngine:
-      ConfigService.getReaderConfig("multiRoleMaleEngine") ||
-      ConfigService.getReaderConfig("voiceEngine"),
-    multiRoleFemaleEngine:
-      ConfigService.getReaderConfig("multiRoleFemaleEngine") ||
-      ConfigService.getReaderConfig("voiceEngine"),
-    multiRoleChildVoice:
-      ConfigService.getReaderConfig("multiRoleChildVoice") ||
-      ConfigService.getReaderConfig("voiceName"),
-    multiRoleChildEngine:
-      ConfigService.getReaderConfig("multiRoleChildEngine") ||
-      ConfigService.getReaderConfig("voiceEngine"),
   }));
   const stateRef = useRef<TextToSpeechState>(state);
   const setState = (
@@ -135,7 +93,6 @@ const TextToSpeech = () => {
   }
   const speechIntervalRef = useRef<number | undefined>(undefined);
   const prevPluginsRef = useRef(plugins);
-  const prevBookKeyRef = useRef(currentBook?.key);
   const prevIsSpeechAutoStartRef = useRef(isSpeechAutoStart);
 
   useEffect(() => {
@@ -177,15 +134,23 @@ const TextToSpeech = () => {
           ...customVoicesRef.current,
         ];
       } else {
-        customVoicesRef.current = getAllVoices(
-          plugins.filter(
-            (item) => item.key === "official-ai-voice-plugin"
-          )
+        // Custom voice plugins execute Node scripts in the main process, so
+        // only system voices are available in the browser build. Reset any
+        // desktop-only voice that was persisted in the shared config.
+        customVoicesRef.current = [];
+        voicesRef.current = [...nativeVoicesRef.current];
+        const currentVoiceName = ConfigService.getReaderConfig("voiceName");
+        const currentEngine = ConfigService.getReaderConfig("voiceEngine");
+        const currentVoice = voicesRef.current.find(
+          (item: any) => item.name === currentVoiceName
         );
-        voicesRef.current = [
-          ...nativeVoicesRef.current,
-          ...customVoicesRef.current,
-        ];
+        if (currentEngine && currentEngine !== "system") {
+          ConfigService.setReaderConfig("voiceEngine", "system");
+        }
+        if (!currentVoice && voicesRef.current.length > 0) {
+          ConfigService.setReaderConfig("voiceName", voicesRef.current[0].name);
+          ConfigService.setReaderConfig("voiceEngine", "system");
+        }
       }
       handleVoiceLocaleList();
       if (
@@ -222,10 +187,7 @@ const TextToSpeech = () => {
           }
         }
         if (!voiceName && !voiceEngine && voicesRef.current.length > 0) {
-          let defaultVoice =
-            voicesRef.current.find(
-              (item: any) => item.plugin !== "official-ai-voice-plugin"
-            ) || voicesRef.current[0];
+          let defaultVoice = voicesRef.current[0];
           ConfigService.setReaderConfig("voiceName", defaultVoice.name);
           ConfigService.setReaderConfig(
             "voiceEngine",
@@ -256,17 +218,6 @@ const TextToSpeech = () => {
       handleVoiceLocaleList();
     }
   }, [plugins]);
-
-  useEffect(() => {
-    if (prevBookKeyRef.current !== currentBook?.key) {
-      prevBookKeyRef.current = currentBook?.key;
-      setState({
-        multiRoleEnabled: ConfigService.getAllListConfig(
-          "multiRoleVoiceBooks"
-        ).includes(currentBook?.key),
-      });
-    }
-  }, [currentBook?.key]);
 
   useEffect(() => {
     if (isSpeechAutoStart && !prevIsSpeechAutoStartRef.current) {
@@ -300,26 +251,6 @@ const TextToSpeech = () => {
       await handleStop();
     }
     handleStartAudio();
-  };
-  const handleMultiRoleToggle = (enabled: boolean) => {
-    if (enabled) {
-      if (!isAuthed) {
-        toast(t("Please upgrade to Pro to use this feature"));
-        handleSetting(true);
-        handleSettingMode("account");
-        return;
-      }
-      ConfigService.setListConfig(
-        currentBook.key,
-        "multiRoleVoiceBooks"
-      );
-    } else {
-      ConfigService.deleteListConfig(
-        currentBook.key,
-        "multiRoleVoiceBooks"
-      );
-    }
-    setState({ multiRoleEnabled: enabled });
   };
   const stopPreviewAudio = () => {
     window.speechSynthesis && window.speechSynthesis.cancel();
@@ -378,13 +309,6 @@ const TextToSpeech = () => {
       return;
     }
 
-    if (engine === "official-ai-voice-plugin") {
-      if (!isAuthed) {
-        toast(t("Please upgrade to Pro to use this feature"));
-        return;
-      }
-      await fetchUserInfo();
-    }
 
     const plugin = plugins.find((item) => item.key === engine);
     if (!plugin) {
@@ -440,43 +364,7 @@ const TextToSpeech = () => {
     );
   };
 
-  const getVoicesByType = (voiceType: string) => {
-    const locale = stateRef.current.voiceLocale;
-    const voiceList = stateRef.current.voiceList[locale] || voicesRef.current;
-
-    if (voiceType === "system") {
-      return voiceList.filter((item: any) => item.plugin === "system");
-    } else if (voiceType === "official-ai-voice-plugin") {
-      return voiceList.filter(
-        (item: any) => item.plugin === "official-ai-voice-plugin"
-      );
-    } else if (voiceType === "custom") {
-      return voiceList.filter(
-        (item: any) =>
-          item.plugin &&
-          item.plugin !== "system" &&
-          item.plugin !== "official-ai-voice-plugin"
-      );
-    }
-    return voiceList;
-  };
   const handleStartAudio = async () => {
-    if (
-      isAuthed &&
-      ConfigService.getReaderConfig("voiceEngine") !== "system"
-    ) {
-      toast.loading(t("Loading audio, please wait..."), {
-        id: "tts-load",
-      });
-      await fetchUserInfo();
-    }
-    if (
-      ConfigService.getReaderConfig("voiceEngine") ===
-        "official-ai-voice-plugin" &&
-      !isAuthed
-    ) {
-      ConfigService.setReaderConfig("voiceEngine", "system");
-    }
     // 每次开始朗读前刷新文本规则（replace / delete）
     TTSUtil.setTextRules(getTextRules(currentBook?.key));
     handleStartSpeech();
@@ -558,14 +446,11 @@ const TextToSpeech = () => {
     _previousEngine: string
   ) => {
     if (!stateRef.current.isAudioOn || nodeListRef.current.length === 0) return;
+    if (!isElectron) {
+      newVoiceEngine = "system";
+    }
 
     const currentIndex = stateRef.current.currentIndex;
-
-    // 鉴权检查（AI 语音）
-    if (newVoiceEngine === "official-ai-voice-plugin" && !isAuthed) {
-      toast(t("Please upgrade to Pro to use this feature"));
-      return;
-    }
 
     // 停止系统语音
     window.speechSynthesis && window.speechSynthesis.cancel();
@@ -581,22 +466,11 @@ const TextToSpeech = () => {
     // 重置内存中的音频路径缓存（适用于所有引擎切换；磁盘 tts 缓存按内容哈希命名，切换语音无需清除）
     TTSUtil.setAudioPaths();
 
-    // AI 语音需要刷新用户信息
-    if (isAuthed && newVoiceEngine !== "system") {
-      toast.loading(t("Loading audio, please wait..."), {
-        id: "tts-load",
-      });
-      await fetchUserInfo();
-    }
-
-    // 非多角色模式下，将 nodeList 所有节点更新为新语音
-    if (!stateRef.current.multiRoleEnabled) {
-      nodeListRef.current = nodeListRef.current.map((node) => ({
-        ...node,
-        voiceName: newVoiceName,
-        voiceEngine: newVoiceEngine,
-      }));
-    }
+    nodeListRef.current = nodeListRef.current.map((node) => ({
+      ...node,
+      voiceName: newVoiceName,
+      voiceEngine: newVoiceEngine,
+    }));
 
     // 先将 isPaused 置 true 终止旧循环，再置 false 从当前句子重新播放
     setState({ isPaused: true });
@@ -647,114 +521,22 @@ const TextToSpeech = () => {
       nodeTextList = nodeTextList.slice(speechStartIndex);
     }
     clearSpeechStartState();
-    if (!stateRef.current.multiRoleEnabled || !isAuthed) {
-      nodeList = nodeTextList.map((text: string) => {
-        return {
-          text,
-          voiceName: ConfigService.getReaderConfig("voiceName"),
-          voiceEngine: ConfigService.getReaderConfig("voiceEngine"),
-        };
-      });
-    } else {
-      // 多角色朗读的所有角色统一使用 multiRoleVoiceType 约束的引擎类型，
-      // 并校验 voice/engine 组合在声音列表中真实存在（自动修复遗留的混合组合）
-      const voiceType =
-        ConfigService.getReaderConfig("multiRoleVoiceType") || "";
-      const resolveVoice = (voiceName: string, voiceEngine: string) => {
-        if (!voiceName) return null;
-        const matched =
-          getVoiceByNameAndEngine(voiceName, voiceEngine) ||
-          voicesRef.current.find((item: any) => item.name === voiceName);
-        if (!matched) return null;
-        const matchedEngine = matched.plugin || "system";
-        if (
-          voiceType === "" ||
-          (voiceType === "custom"
-            ? matchedEngine !== "system" &&
-              matchedEngine !== "official-ai-voice-plugin"
-            : matchedEngine === voiceType)
-        ) {
-          return { voiceName, voiceEngine: matchedEngine };
-        }
-        return null;
-      };
-      const globalVoice = resolveVoice(
-        ConfigService.getReaderConfig("voiceName"),
-        ConfigService.getReaderConfig("voiceEngine") || "system"
+    nodeList = nodeTextList.map((text: string) => {
+      const configuredVoiceName = ConfigService.getReaderConfig("voiceName");
+      const nativeVoice = voicesRef.current.find(
+        (item: any) => item.name === configuredVoiceName
       );
-      const narratorVoiceInfo =
-        resolveVoice(
-          stateRef.current.multiRoleNarratorVoice,
-          stateRef.current.multiRoleNarratorEngine || "system"
-        ) || globalVoice;
-      if (voiceType !== "" && voiceType !== "system" && !narratorVoiceInfo) {
-        // AI/自定义类型下没有任何可用声音时，回退到全局单语音朗读
-        nodeList = nodeTextList.map((text: string) => {
-          return {
-            text,
-            voiceName: ConfigService.getReaderConfig("voiceName"),
-            voiceEngine: ConfigService.getReaderConfig("voiceEngine"),
-          };
-        });
-        return nodeList;
-      }
-      toast.loading(t("Analyzing roles, please wait..."), {
-        id: "tts-load",
-      });
-      if (nodeTextList.join("").length > 50000) {
-        toast.error(t("The text is too long to analyze"), {
-          id: "tts-load",
-        });
-        setState({ isAudioOn: false });
-        return [];
-      }
-      let splitTextList = rawNodeList.flatMap((texts, index) =>
-        texts.map((text) => ({ text, index: index }))
-      );
-      let res = await getSplitSentence(splitTextList);
-      toast.dismiss("tts-load");
-
-      const narratorVoice = narratorVoiceInfo || {
-        voiceName: "",
-        voiceEngine: "system",
+      return {
+        text,
+        voiceName:
+          isElectron || nativeVoice
+            ? configuredVoiceName
+            : voicesRef.current[0]?.name || configuredVoiceName,
+        voiceEngine: isElectron
+          ? ConfigService.getReaderConfig("voiceEngine")
+          : "system",
       };
-      const maleVoice =
-        resolveVoice(
-          stateRef.current.multiRoleMaleVoice,
-          stateRef.current.multiRoleMaleEngine || "system"
-        ) || narratorVoice;
-      const femaleVoice =
-        resolveVoice(
-          stateRef.current.multiRoleFemaleVoice,
-          stateRef.current.multiRoleFemaleEngine || "system"
-        ) || narratorVoice;
-      const childVoice =
-        resolveVoice(
-          stateRef.current.multiRoleChildVoice,
-          stateRef.current.multiRoleChildEngine || "system"
-        ) || narratorVoice;
-      if (res && res.data && res.data.sentences) {
-        nodeList = res.data.sentences.map((item: any) => {
-          let voice = narratorVoice;
-          if (item.role === "male") {
-            voice = maleVoice;
-          } else if (item.role === "female") {
-            voice = femaleVoice;
-          } else if (item.role === "child") {
-            voice = childVoice;
-          }
-          return {
-            text: item.text,
-            voiceName: voice.voiceName,
-            voiceEngine: voice.voiceEngine,
-          };
-        });
-      } else {
-        toast.error(t("Analysis failed"));
-        setState({ isAudioOn: false });
-        return [];
-      }
-    }
+    });
 
     if (nodeList.length === 0) {
       if (isReadingRawPDF(currentBook)) {
@@ -772,6 +554,10 @@ const TextToSpeech = () => {
     return nodeList;
   };
   const handleCustomRead = async (nodeIndex: number) => {
+    if (!isElectron) {
+      await handleSystemRead(nodeIndex);
+      return;
+    }
     let speed = parseFloat(ConfigService.getReaderConfig("voiceSpeed")) || 1;
     if (!stateRef.current.isAudioOn) {
       TTSUtil.setAudioPaths();
@@ -794,7 +580,7 @@ const TextToSpeech = () => {
           nodeListRef.current,
           10,
           true,
-          node.voiceEngine === "official-ai-voice-plugin"
+          false
         );
         toast.dismiss("tts-load");
         if (result === "error") {
@@ -816,7 +602,7 @@ const TextToSpeech = () => {
         nodeListRef.current,
         20,
         false,
-        node.voiceEngine === "official-ai-voice-plugin"
+        false
       );
       let res = await handleSpeech(index);
       if (res === "error") {
@@ -1234,33 +1020,8 @@ const TextToSpeech = () => {
                 return;
               }
               const newEngine = voice.plugin || "system";
-              if (
-                newEngine === "official-ai-voice-plugin" &&
-                !isAuthed
-              ) {
-                toast(
-                  t("Please upgrade to Pro to use this feature")
-                );
-                handleSetting(true);
-                handleSettingMode("account");
-                return;
-              }
               ConfigService.setReaderConfig("voiceName", voiceName);
               ConfigService.setReaderConfig("voiceEngine", newEngine);
-              if (
-                voice.plugin === "official-ai-voice-plugin" &&
-                event.target.value.indexOf("Neural") > -1
-              ) {
-                toast(
-                  t(
-                    "Due to the high cost of Azure TTS voices, this voice will consume 5 times of your daily quota than normal voice"
-                  ),
-                  {
-                    duration: 8000,
-                    id: "costWarning",
-                  }
-                );
-              }
               toast.success(t("Setup successful"));
               if (stateRef.current.isAudioOn) {
                 handleVoiceSwitch(voiceName, newEngine, previousEngine);
@@ -1314,335 +1075,29 @@ const TextToSpeech = () => {
           </select>
         </div>
         <div style={{ marginTop: "20px", textAlign: "center" }}>
-          <span
-            style={{
-              textDecoration: "underline",
-              cursor: "pointer",
-              textAlign: "center",
-            }}
-            onClick={() => {
-              handlePluginSettingTab("voice");
-              handleSetting(true);
-              handleSettingMode("plugins");
-            }}
-          >
-            <Trans>Add new voice</Trans>
-          </span>
+          {isElectron ? (
+            <span
+              style={{
+                textDecoration: "underline",
+                cursor: "pointer",
+                textAlign: "center",
+              }}
+              onClick={() => {
+                handlePluginSettingTab("voice");
+                handleSetting(true);
+                handleSettingMode("plugins");
+              }}
+            >
+              <Trans>Add new voice</Trans>
+            </span>
+          ) : (
+            <span style={{ opacity: 0.7 }}>
+              <Trans>
+                Custom voice plugins are available in the desktop app
+              </Trans>
+            </span>
+          )}
         </div>
-        {/* Multi-role reading section */}
-        <SwitchRow
-          variant="setting"
-          title={
-            <>
-              <Trans>AI multi-role speech</Trans>
-              <span style={{ fontSize: "13px", color: "#f16464" }}> (Pro)</span>
-            </>
-          }
-          titleStyle={{ width: "calc(100% - 50px)" }}
-          style={{
-            marginLeft: "20px",
-            width: "88%",
-            marginTop: "20px",
-            fontWeight: 500,
-          }}
-          isEnabled={stateRef.current.multiRoleEnabled}
-          onClick={() => {
-            handleMultiRoleToggle(!stateRef.current.multiRoleEnabled);
-          }}
-        />
-        <p
-          className="setting-option-subtitle"
-          style={{ marginLeft: "20px", marginRight: "20px" }}
-        >
-          <Trans>
-            {
-              "Use AI to analyze books, with different characters reading aloud in different voices"
-            }
-          </Trans>
-        </p>
-        {stateRef.current.multiRoleEnabled && (
-          <>
-            {/* Voice Type Selection */}
-            <div
-              className="setting-dialog-new-title"
-              style={{ marginLeft: "20px", width: "88%", fontWeight: 500 }}
-            >
-              <Trans>Voice type</Trans>
-              <select
-                name=""
-                className="lang-setting-dropdown"
-                id="multi-role-voice-type"
-                value={stateRef.current.multiRoleVoiceType}
-                onChange={(event) => {
-                  if (event.target.value === stateRef.current.multiRoleVoiceType)
-                    return;
-                  setState({ multiRoleVoiceType: event.target.value });
-                  ConfigService.setReaderConfig(
-                    "multiRoleVoiceType",
-                    event.target.value
-                  );
-                  // 切换声音类型后清除各角色旧类型的 voice/engine 配置，
-                  // 避免遗留“系统声音 + AI 引擎”之类的混合组合
-                  ["Narrator", "Male", "Female", "Child"].forEach((role) => {
-                    ConfigService.setReaderConfig(`multiRole${role}Voice`, "");
-                    ConfigService.setReaderConfig(`multiRole${role}Engine`, "");
-                  });
-                  setState({
-                    multiRoleNarratorVoice: "",
-                    multiRoleNarratorEngine: "",
-                    multiRoleMaleVoice: "",
-                    multiRoleMaleEngine: "",
-                    multiRoleFemaleVoice: "",
-                    multiRoleFemaleEngine: "",
-                    multiRoleChildVoice: "",
-                    multiRoleChildEngine: "",
-                  });
-                  toast(t("Please reselect voices for all roles"));
-                }}
-              >
-                <option value="" className="lang-setting-option">
-                  {t("Please select")}
-                </option>
-                <option value="system" className="lang-setting-option">
-                  {t("System voice")}
-                </option>
-                <option
-                  value="official-ai-voice-plugin"
-                  className="lang-setting-option"
-                >
-                  {t("Official AI Voice")}
-                </option>
-                <option value="custom" className="lang-setting-option">
-                  {t("Custom voice")}
-                </option>
-              </select>
-            </div>
-            {/* Narrator voice */}
-            <div
-              className="setting-dialog-new-title"
-              style={{ marginLeft: "20px", width: "88%", fontWeight: 500 }}
-            >
-              {renderVoicePreviewLabel(
-                "Narrator voice",
-                stateRef.current.multiRoleNarratorVoice,
-                stateRef.current.multiRoleNarratorEngine
-              )}
-              <select
-                name=""
-                className="lang-setting-dropdown"
-                id="multi-role-narrator-voice"
-                value={
-                  stateRef.current.multiRoleNarratorVoice
-                    ? [
-                        stateRef.current.multiRoleNarratorVoice,
-                        stateRef.current.multiRoleNarratorEngine,
-                      ].join("#")
-                    : ""
-                }
-                onChange={(event) => {
-                  let selectedValue = event.target.value;
-                  let [voiceName, plugin] = selectedValue.split("#");
-                  ConfigService.setReaderConfig(
-                    "multiRoleNarratorVoice",
-                    voiceName
-                  );
-                  ConfigService.setReaderConfig(
-                    "multiRoleNarratorEngine",
-                    plugin || "system"
-                  );
-                  setState({
-                    multiRoleNarratorVoice: voiceName,
-                    multiRoleNarratorEngine: plugin || "system",
-                  });
-                  toast.success(t("Setup successful"));
-                }}
-              >
-                <option value="" className="lang-setting-option">
-                  {t("Please select")}
-                </option>
-                {getVoicesByType(stateRef.current.multiRoleVoiceType).map(
-                  (item) => (
-                    <option
-                      value={[item.name, item.plugin].join("#")}
-                      key={[item.name, item.plugin].join("#")}
-                      className="lang-setting-option"
-                    >
-                      {t(item.displayName || item.name)}
-                    </option>
-                  )
-                )}
-              </select>
-            </div>
-            {/* Male voice */}
-            <div
-              className="setting-dialog-new-title"
-              style={{ marginLeft: "20px", width: "88%", fontWeight: 500 }}
-            >
-              {renderVoicePreviewLabel(
-                "Male voice",
-                stateRef.current.multiRoleMaleVoice,
-                stateRef.current.multiRoleMaleEngine
-              )}
-              <select
-                name=""
-                className="lang-setting-dropdown"
-                id="multi-role-male-voice"
-                value={
-                  stateRef.current.multiRoleMaleVoice
-                    ? [
-                        stateRef.current.multiRoleMaleVoice,
-                        stateRef.current.multiRoleMaleEngine,
-                      ].join("#")
-                    : ""
-                }
-                onChange={(event) => {
-                  let selectedValue = event.target.value;
-                  let [voiceName, plugin] = selectedValue.split("#");
-                  ConfigService.setReaderConfig(
-                    "multiRoleMaleVoice",
-                    voiceName
-                  );
-                  ConfigService.setReaderConfig(
-                    "multiRoleMaleEngine",
-                    plugin || "system"
-                  );
-                  setState({
-                    multiRoleMaleVoice: voiceName,
-                    multiRoleMaleEngine: plugin || "system",
-                  });
-                  toast.success(t("Setup successful"));
-                }}
-              >
-                <option value="" className="lang-setting-option">
-                  {t("Please select")}
-                </option>
-                {getVoicesByType(stateRef.current.multiRoleVoiceType)
-                  .filter((item) => !item.gender || item.gender === "male")
-                  .map((item) => (
-                    <option
-                      value={[item.name, item.plugin].join("#")}
-                      key={[item.name, item.plugin].join("#")}
-                      className="lang-setting-option"
-                    >
-                      {t(item.displayName || item.name)}
-                    </option>
-                  ))}
-              </select>
-            </div>
-            {/* Female voice */}
-            <div
-              className="setting-dialog-new-title"
-              style={{ marginLeft: "20px", width: "88%", fontWeight: 500 }}
-            >
-              {renderVoicePreviewLabel(
-                "Female voice",
-                stateRef.current.multiRoleFemaleVoice,
-                stateRef.current.multiRoleFemaleEngine
-              )}
-              <select
-                name=""
-                className="lang-setting-dropdown"
-                id="multi-role-female-voice"
-                value={
-                  stateRef.current.multiRoleFemaleVoice
-                    ? [
-                        stateRef.current.multiRoleFemaleVoice,
-                        stateRef.current.multiRoleFemaleEngine,
-                      ].join("#")
-                    : ""
-                }
-                onChange={(event) => {
-                  let selectedValue = event.target.value;
-                  let [voiceName, plugin] = selectedValue.split("#");
-                  ConfigService.setReaderConfig(
-                    "multiRoleFemaleVoice",
-                    voiceName
-                  );
-                  ConfigService.setReaderConfig(
-                    "multiRoleFemaleEngine",
-                    plugin || "system"
-                  );
-                  setState({
-                    multiRoleFemaleVoice: voiceName,
-                    multiRoleFemaleEngine: plugin || "system",
-                  });
-                  toast.success(t("Setup successful"));
-                }}
-              >
-                <option value="" className="lang-setting-option">
-                  {t("Please select")}
-                </option>
-                {getVoicesByType(stateRef.current.multiRoleVoiceType)
-                  .filter((item) => !item.gender || item.gender === "female")
-                  .map((item) => (
-                    <option
-                      value={[item.name, item.plugin].join("#")}
-                      key={[item.name, item.plugin].join("#")}
-                      className="lang-setting-option"
-                    >
-                      {t(item.displayName || item.name)}
-                    </option>
-                  ))}
-              </select>
-            </div>
-            {/* Child voice */}
-            <div
-              className="setting-dialog-new-title"
-              style={{ marginLeft: "20px", width: "88%", fontWeight: 500 }}
-            >
-              {renderVoicePreviewLabel(
-                "Child voice",
-                stateRef.current.multiRoleChildVoice,
-                stateRef.current.multiRoleChildEngine
-              )}
-              <select
-                name=""
-                className="lang-setting-dropdown"
-                id="multi-role-child-voice"
-                value={
-                  stateRef.current.multiRoleChildVoice
-                    ? [
-                        stateRef.current.multiRoleChildVoice,
-                        stateRef.current.multiRoleChildEngine,
-                      ].join("#")
-                    : ""
-                }
-                onChange={(event) => {
-                  let selectedValue = event.target.value;
-                  let [voiceName, plugin] = selectedValue.split("#");
-                  ConfigService.setReaderConfig(
-                    "multiRoleChildVoice",
-                    voiceName
-                  );
-                  ConfigService.setReaderConfig(
-                    "multiRoleChildEngine",
-                    plugin || "system"
-                  );
-                  setState({
-                    multiRoleChildVoice: voiceName,
-                    multiRoleChildEngine: plugin || "system",
-                  });
-                  toast.success(t("Setup successful"));
-                }}
-              >
-                <option value="" className="lang-setting-option">
-                  {t("Please select")}
-                </option>
-                {getVoicesByType(stateRef.current.multiRoleVoiceType).map(
-                  (item) => (
-                    <option
-                      value={[item.name, item.plugin].join("#")}
-                      key={[item.name, item.plugin].join("#")}
-                      className="lang-setting-option"
-                    >
-                      {t(item.displayName || item.name)}
-                    </option>
-                  )
-                )}
-              </select>
-            </div>
-          </>
-        )}
       </>
     );
   };

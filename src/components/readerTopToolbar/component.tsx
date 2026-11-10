@@ -48,7 +48,6 @@ const ReaderTopToolbar = (props: ReaderTopToolbarProps) => {
   const isSettingLocked = useAppStore((s) => s.reader.isSettingLocked);
   const isDockedRight = useAppStore((s) => s.reader.isDockedRight);
   const isAnnotationOpen = useAppStore((s) => s.reader.isAnnotationOpen);
-  const handleStudyLangDialog = useAppStore((s) => s.handleStudyLangDialog);
   const handleAssistReadDialog = useAppStore((s) => s.handleAssistReadDialog);
   const handleScalePageDialog = useAppStore((s) => s.handleScalePageDialog);
   const handlePdfCropDialog = useAppStore((s) => s.handlePdfCropDialog);
@@ -375,18 +374,6 @@ const ReaderTopToolbar = (props: ReaderTopToolbarProps) => {
         >
           {currentBook && !isReadingRawPDF(currentBook) && (
             <>
-              <div
-                className="reader-setting-icon-container"
-                {...props.handleDialogButtonHover(
-                  handleStudyLangDialog,
-                  ".study-lang-dialog-container"
-                )}
-              >
-                <span
-                  className="icon-trans reader-setting-icon"
-                  style={{ fontSize: 19 }}
-                ></span>
-              </div>
               <div
                 className="reader-setting-icon-container"
                 {...props.handleDialogButtonHover(

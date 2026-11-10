@@ -3,7 +3,7 @@ import i18n from "../../i18n";
 
 const collectionUtil = new CollectionUtil(ConfigService);
 
-export const BOOK_DRAG_TYPE = "application/x-koodo-book";
+export const BOOK_DRAG_TYPE = "application/x-kesach-book";
 
 export function filterNonCollectionKeys(bookKeys: string[]): string[] {
   return bookKeys.filter((key) => key && !collectionUtil.isCollection(key));

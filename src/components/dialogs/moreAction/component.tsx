@@ -461,7 +461,7 @@ const MoreAction = (
             className="action-dialog-edit"
             style={{ paddingLeft: "0px" }}
             onClick={() => {
-              const link = `koodo-reader://open-book?bookKey=${currentBook.key}`;
+              const link = `kesach://open-book?bookKey=${currentBook.key}`;
               navigator.clipboard.writeText(link).then(() => {
                 toast.success(t("Copied"));
               });

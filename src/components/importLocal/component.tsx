@@ -10,13 +10,11 @@ import * as Kookit from "../../assets/lib/kookit.min";
 import { isElectron } from "react-device-detect";
 import BookUtil from "../../utils/file/bookUtil";
 import toast from "react-hot-toast";
-import DOMPurify from "dompurify";
 import {
   CommonTool,
   ConfigService,
 } from "../../assets/lib/kookit-extra-browser.min";
 import CoverUtil from "../../utils/file/coverUtil";
-import { Readability } from "@mozilla/readability";
 import {
   calculateFileMD5,
   clearComicTemp,
@@ -24,12 +22,9 @@ import {
   isFixedLayoutBook,
   supportedFormats,
   throttle,
-  vexComfirmAsync,
-  vexPromptAsync,
 } from "../../utils/common";
 import DatabaseService from "../../utils/storage/databaseService";
 import { BookHelper } from "../../assets/lib/kookit.min";
-import { analyzeBookTitle } from "../../utils/request/reader";
 import { convertCajToPdf, isCajFormat } from "../../utils/file/cajUtil";
 import {
   buildImportRecords,
@@ -63,13 +58,6 @@ const supportedFormatsAccept = supportedFormats.reduce<
 }, {});
 declare var window: any;
 let clickFilePath = "";
-const escapeHtml = (text: string) =>
-  text
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
 // Comic 封面规则与 kookit comic-book.js 保持一致：取自然排序后的第一张图片
 const COMIC_IMAGE_EXTS = [
   ".jpg",
@@ -94,16 +82,12 @@ const getComicImageExt = (name: string) => {
 
 const ImportLocal = (props: ImportLocalProps) => {
   const books = useAppStore((s) => s.manager.books);
-  const cloudSyncFunc = useAppStore((s) => s.book.cloudSyncFunc);
   const isCollapsed = useAppStore((s) => s.sidebar.isCollapsed);
   const deletedBooks = useAppStore((s) => s.manager.deletedBooks);
   const mode = useAppStore((s) => s.sidebar.mode);
   const shelfTitle = useAppStore((s) => s.sidebar.shelfTitle);
-  const isAuthed = useAppStore((s) => s.manager.isAuthed);
   const handleFetchBooks = useAppStore((s) => s.handleFetchBooks);
   const handleReadingBook = useAppStore((s) => s.handleReadingBook);
-  const handleImportDialog = useAppStore((s) => s.handleImportDialog);
-  const handleOPDSDialog = useAppStore((s) => s.handleOPDSDialog);
   const handleAutoImportDialog = useAppStore((s) => s.handleAutoImportDialog);
   const handleImportBookFunc = useAppStore((s) => s.handleImportBookFunc);
   const { t } = useTranslation();
@@ -131,15 +115,11 @@ const ImportLocal = (props: ImportLocalProps) => {
     setStateObj(next);
   };
   const resizeHandlerRef = useRef<(() => void) | null>(null);
-  const importUrlHandlerRef = useRef<((config: any) => void) | null>(null);
   const getMd5WithBrowserRef = useRef<((file: File) => Promise<void>) | null>(
     null
   );
   const handleFilePathRef = useRef<
     ((filePath: string) => Promise<void>) | null
-  >(null);
-  const handleURLImportRef = useRef<
-    ((e?: React.MouseEvent, externalUrl?: string) => Promise<void>) | null
   >(null);
 
   useEffect(() => {
@@ -165,26 +145,6 @@ const ImportLocal = (props: ImportLocalProps) => {
       };
       window.addEventListener("focus", focusHandler, false);
 
-      importUrlHandlerRef.current = async (config: any) => {
-        const rawUrl = config?.url;
-        if (!rawUrl || typeof rawUrl !== "string") return;
-        const confirmed = await vexComfirmAsync(
-          t(
-            "Do you want to download and import the book from this URL?"
-          ) +
-            "<br><span style='word-break:break-all'>" +
-            escapeHtml(rawUrl) +
-            "</span>",
-          "Confirm",
-          "Cancel"
-        );
-        if (!confirmed) {
-          toast.error(t("Import cancelled"));
-          return;
-        }
-        handleURLImportRef.current?.(undefined, rawUrl);
-      };
-      ipcRenderer.on("import-url-from-link", importUrlHandlerRef.current);
     }
     resizeHandlerRef.current = throttle(() => {
       setState({ width: document.body.clientWidth });
@@ -199,13 +159,6 @@ const ImportLocal = (props: ImportLocalProps) => {
       if (focusHandler) {
         window.removeEventListener("focus", focusHandler);
         focusHandler = null;
-      }
-      if (importUrlHandlerRef.current) {
-        window.electronAPI.removeListener(
-          "import-url-from-link",
-          importUrlHandlerRef.current
-        );
-        importUrlHandlerRef.current = null;
       }
       if (resizeHandlerRef.current) {
         window.removeEventListener("resize", resizeHandlerRef.current);
@@ -277,18 +230,7 @@ const ImportLocal = (props: ImportLocalProps) => {
       if (stateRef.current.isOpenFile) {
         if (isPreventAdd) {
           //ignore
-        } else if (
-          isAuthed &&
-          ConfigService.getItem("defaultSyncOption")
-        ) {
-          await BookUtil.addBook(
-            book.key,
-            book.format.toLowerCase(),
-            buffer,
-            sourcePath
-          );
-          await CoverUtil.addCover(book);
-        } else if (isImportPath) {
+
           await CoverUtil.addCover(book);
           //ignore
         } else {
@@ -307,10 +249,7 @@ const ImportLocal = (props: ImportLocalProps) => {
           return resolve();
         }
       } else {
-        if (
-          !isImportPath ||
-          (isAuthed && ConfigService.getItem("defaultSyncOption"))
-        ) {
+        if (!isImportPath) {
           await BookUtil.addBook(
             book.key,
             book.format.toLowerCase(),
@@ -368,25 +307,6 @@ const ImportLocal = (props: ImportLocalProps) => {
           return resolve();
         });
     });
-  };
-
-  const analyzeBookMetadata = async (book: BookModel, bookName: string) => {
-    if (
-      ConfigService.getReaderConfig("isAIAnalyzeTitle") !== "yes" ||
-      !isAuthed ||
-      book.name !== bookName
-    ) {
-      return;
-    }
-    try {
-      const response = await analyzeBookTitle(book.name);
-      if (response && response.code === 200 && response.data?.name) {
-        book.name = response.data.name;
-        book.author = response.data.author || book.author;
-      }
-    } catch (error) {
-      console.error(error, bookName);
-    }
   };
 
   const getMd5WithBrowser = async (file: File) => {
@@ -607,7 +527,6 @@ const ImportLocal = (props: ImportLocalProps) => {
         sourcePath,
         ""
       );
-      await analyzeBookMetadata(book, bookName);
       await handleAddBook(book, new ArrayBuffer(0), sourcePath);
       return resolve();
     } catch (error) {
@@ -857,7 +776,6 @@ const ImportLocal = (props: ImportLocalProps) => {
       });
       return null;
     }
-    await analyzeBookMetadata(result as BookModel, bookName);
     await handleAddBook(
       result as BookModel,
       file_content as ArrayBuffer,
@@ -868,234 +786,10 @@ const ImportLocal = (props: ImportLocalProps) => {
     return result as BookModel;
   };
 
-  const decodeHtmlEntities = (value: string) => {
-    if (!value) return "";
-    const doc = new DOMParser().parseFromString(value, "text/html");
-    return doc.documentElement.textContent || value;
-  };
-
-  const escapeHtmlValue = (value: string) => {
-    return (value || "")
-      .replace(/&/g, "&amp;")
-      .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;")
-      .replace(/"/g, "&quot;")
-      .replace(/'/g, "&#039;");
-  };
-
-  const makeUrlsAbsolute = (rootDoc: Document, baseUrl: string) => {
-    const toAbs = (value: string | null) => {
-      if (!value) return value;
-      if (value.startsWith("data:")) return value;
-      try {
-        return new URL(value, baseUrl).toString();
-      } catch {
-        return value;
-      }
-    };
-
-    rootDoc.querySelectorAll("a[href]").forEach((a) => {
-      const href = a.getAttribute("href");
-      const next = toAbs(href);
-      if (next) a.setAttribute("href", next);
-    });
-    rootDoc.querySelectorAll("img[src]").forEach((img) => {
-      const src = img.getAttribute("src");
-      const next = toAbs(src);
-      if (next) img.setAttribute("src", next);
-    });
-    ["data-src", "data-original", "data-lazy-src"].forEach((attr) => {
-      rootDoc.querySelectorAll(`img[${attr}]`).forEach((img) => {
-        const value = img.getAttribute(attr);
-        const next = toAbs(value);
-        if (next) img.setAttribute(attr, next);
-      });
-    });
-    rootDoc.querySelectorAll("link[href]").forEach((l) => {
-      const href = l.getAttribute("href");
-      const next = toAbs(href);
-      if (next) l.setAttribute("href", next);
-    });
-  };
-
-  const fetchImageAsDataUrl = async (imageUrl: string): Promise<string | null> => {
-    if (!imageUrl || imageUrl.startsWith("data:")) {
-      return imageUrl || null;
-    }
-    if (imageUrl.startsWith("blob:")) {
-      return null;
-    }
-    try {
-      const response = await fetch(imageUrl);
-      if (!response.ok) return null;
-      const blob = await response.blob();
-      const contentType = (
-        response.headers.get("content-type") ||
-        blob.type ||
-        ""
-      ).toLowerCase();
-      if (contentType && !contentType.startsWith("image/")) {
-        return null;
-      }
-      return await CoverUtil.blobToBase64(blob);
-    } catch {
-      return null;
-    }
-  };
-
-  const resolveImageUrl = (img: Element): string | null => {
-    const candidates = [
-      img.getAttribute("src"),
-      img.getAttribute("data-src"),
-      img.getAttribute("data-original"),
-      img.getAttribute("data-lazy-src"),
-    ].filter(Boolean) as string[];
-
-    for (const value of candidates) {
-      if (value.startsWith("data:")) {
-        if (value.length > 200) return value;
-        continue;
-      }
-      if (!value.startsWith("blob:")) return value;
-    }
-    return null;
-  };
-
-  const embedImagesAsBase64 = async (rootDoc: Document, toastId: string) => {
-    const images = Array.from(rootDoc.querySelectorAll("img"));
-    const total = images.length;
-    if (total === 0) return;
-
-    for (let i = 0; i < images.length; i++) {
-      const img = images[i];
-      const imageUrl = resolveImageUrl(img);
-      if (!imageUrl) continue;
-
-      if (imageUrl.startsWith("data:")) {
-        img.setAttribute("src", imageUrl);
-        continue;
-      }
-
-      const dataUrl = await fetchImageAsDataUrl(imageUrl);
-      if (dataUrl) {
-        img.setAttribute("src", dataUrl);
-        img.removeAttribute("data-src");
-        img.removeAttribute("data-original");
-        img.removeAttribute("data-lazy-src");
-        img.removeAttribute("srcset");
-      }
-
-      const pct = Math.round(((i + 1) / total) * 100);
-      toast.loading(t("Downloading") + ": " + pct + "%", {
-        id: toastId,
-        position: "bottom-center",
-      });
-    }
-  };
-
-  const importHtmlFromURL = async (
-    url: string,
-    urlFileName: string,
-    toastId: string
-  ) => {
-    toast.loading(t("Downloading") + ": 0%", {
-      id: toastId,
-      position: "bottom-center",
-    });
-    const response = await fetch(url);
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}`);
-    }
-
-    const contentType = (
-      response.headers.get("content-type") || ""
-    ).toLowerCase();
-    const looksLikeHtml =
-      contentType.includes("text/html") ||
-      contentType.includes("application/xhtml+xml") ||
-      contentType.includes("text/plain") ||
-      contentType.includes("application/xml") ||
-      contentType.includes("text/xml") ||
-      !contentType;
-
-    if (!looksLikeHtml) {
-      throw new Error(
-        t("Unsupported file format") +
-          ": " +
-          (contentType || "unknown")
-      );
-    }
-
-    const htmlText = await response.text();
-    const parser = new DOMParser();
-    const doc = parser.parseFromString(htmlText, "text/html");
-
-    // 1) Try better main-content extraction (more aggressive clipping).
-    let extracted: any = null;
-    try {
-      const reader = new Readability(doc);
-      extracted = reader.parse();
-    } catch (e) {
-      extracted = null;
-    }
-
-    const rawTitle =
-      extracted?.title ||
-      doc.title ||
-      (urlFileName || "book").replace(/\.[^/.]+$/, "") ||
-      "book";
-    const decodedTitle = decodeHtmlEntities(rawTitle).trim() || "book";
-
-    // 2) Prefer extracted content; fallback to body html.
-    const extractedContent = extracted?.content || doc.body?.innerHTML || "";
-
-    // 3) Resolve relative links/images to absolute using the original URL.
-    const contentDoc = parser.parseFromString(extractedContent, "text/html");
-    if (contentDoc?.body) {
-      makeUrlsAbsolute(contentDoc, url);
-      await embedImagesAsBase64(contentDoc, toastId);
-    }
-
-    // 4) Sanitize & rebuild as a standalone html "book" file.
-    const sanitizedBody = DOMPurify.sanitize(
-      contentDoc.body?.innerHTML || extractedContent,
-      {
-        USE_PROFILES: { html: true },
-      }
-    );
-
-    const safeTitle = escapeHtmlValue(decodedTitle);
-    const finalHtmlFileName = `${decodedTitle.replace(/[/\\?%*:|"<>]/g, "-")}.html`;
-    const finalHtml = `<!doctype html><html><head><meta charset="utf-8"/><title>${safeTitle}</title></head><body>${sanitizedBody}</body></html>`;
-
-    const blob = new Blob([new TextEncoder().encode(finalHtml)], {
-      type: "text/html",
-    });
-    const file = new File([blob], finalHtmlFileName);
-    file.path = url; // Helps bookkeeping; works in Electron, no harm in browser.
-
-    toast.dismiss(toastId);
-    await getMd5WithBrowser(file);
-  };
   const toggleMoreOptions = () => {
     setState((prevState) => ({
       isMoreOptionsVisible: !prevState.isMoreOptionsVisible,
     }));
-  };
-
-  // Add method to handle cloud import
-  const handleCloudImport = async (e: React.MouseEvent) => {
-    e.stopPropagation(); // Prevent triggering the Dropzone
-    setState({ isMoreOptionsVisible: false });
-
-    handleImportDialog(true);
-  };
-
-  // Handle OPDS import
-  const handleOPDSImport = (e: React.MouseEvent) => {
-    e.stopPropagation(); // Prevent triggering the Dropzone
-    setState({ isMoreOptionsVisible: false });
-    handleOPDSDialog(true);
   };
 
   // Handle auto import folder
@@ -1105,104 +799,6 @@ const ImportLocal = (props: ImportLocalProps) => {
     handleAutoImportDialog(true);
   };
 
-  // Handle URL import
-  const handleURLImport = async (e?: React.MouseEvent, externalUrl?: string) => {
-    e?.stopPropagation();
-    setState({ isMoreOptionsVisible: false });
-    const url =
-      typeof externalUrl === "string"
-        ? externalUrl
-        : await vexPromptAsync(
-            t("Enter book download URL or article URL"),
-            "https://"
-          );
-    if (!url || typeof url !== "string") return;
-    const trimmedUrl = url.trim();
-    if (
-      !trimmedUrl.startsWith("http://") &&
-      !trimmedUrl.startsWith("https://")
-    ) {
-      toast.error(t("Please enter a valid http or https URL"));
-      return;
-    }
-    let fileName = decodeURIComponent(
-      trimmedUrl.split("?")[0].split("/").pop() || "book"
-    );
-    const ext = "." + fileName.split(".").pop()?.toLowerCase();
-    const toastId = "url-download";
-    if (
-      !supportedFormats
-        .filter((item) => item !== ".html" && item !== ".htm")
-        .includes(ext)
-    ) {
-      try {
-        await importHtmlFromURL(trimmedUrl, fileName, toastId);
-      } catch (error) {
-        const errorMessage =
-          error instanceof Error ? error.message : String(error);
-        toast.error(t("Import failed") + ": " + errorMessage, {
-          id: toastId,
-        });
-        console.error("URL import error:", error);
-      }
-      return;
-    }
-
-    toast.loading(t("Downloading") + ": 0%", {
-      id: toastId,
-      position: "bottom-center",
-    });
-    try {
-      const response = await fetch(trimmedUrl);
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`);
-      }
-      const contentLength = response.headers.get("content-length");
-      const total = contentLength ? parseInt(contentLength, 10) : 0;
-      const reader = response.body!.getReader();
-      const chunks: Uint8Array[] = [];
-      let received = 0;
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        chunks.push(value);
-        received += value.length;
-        if (total > 0) {
-          const percent = Math.round((received / total) * 100);
-          toast.loading(t("Downloading") + ": " + percent + "%", {
-            id: toastId,
-            position: "bottom-center",
-          });
-        } else {
-          toast.loading(
-            t("Downloading") +
-              ": " +
-              (received / 1024).toFixed(1) +
-              " KB",
-            { id: toastId, position: "bottom-center" }
-          );
-        }
-      }
-      toast.dismiss(toastId);
-      const arrayBuffer = new Uint8Array(received);
-      let offset = 0;
-      for (const chunk of chunks) {
-        arrayBuffer.set(chunk, offset);
-        offset += chunk.length;
-      }
-      const blob = new Blob([arrayBuffer.buffer]);
-      const file = new File([blob], fileName);
-      await getMd5WithBrowser(file);
-    } catch (error) {
-      const errorMessage =
-        error instanceof Error ? error.message : String(error);
-      toast.error(t("Import failed") + ": " + errorMessage, {
-        id: toastId,
-      });
-      console.error("URL import error:", error);
-    }
-  };
-  handleURLImportRef.current = handleURLImport;
   const render = () => {
     return (
       <Dropzone
@@ -1215,12 +811,6 @@ const ImportLocal = (props: ImportLocalProps) => {
               item.path = window.electronAPI.getPathForFile(item);
             }
             await getMd5WithBrowser(item);
-          }
-          if (
-            ConfigService.getReaderConfig("isDisableAutoSync") !== "yes" &&
-            ConfigService.getItem("defaultSyncOption")
-          ) {
-            await cloudSyncFunc();
           }
         }}
         accept={supportedFormatsAccept}
@@ -1341,14 +931,6 @@ const ImportLocal = (props: ImportLocalProps) => {
                           setState({
                             isMoreOptionsVisible: false,
                           });
-                          if (
-                            ConfigService.getReaderConfig(
-                              "isDisableAutoSync"
-                            ) !== "yes" &&
-                            ConfigService.getItem("defaultSyncOption")
-                          ) {
-                            await cloudSyncFunc();
-                          }
                         }
                       }}
                     >
@@ -1388,43 +970,11 @@ const ImportLocal = (props: ImportLocalProps) => {
                               await getMd5WithBrowser(item);
                             }
                             toggleMoreOptions();
-                            if (
-                              ConfigService.getReaderConfig(
-                                "isDisableAutoSync"
-                              ) !== "yes" &&
-                              ConfigService.getItem("defaultSyncOption")
-                            ) {
-                              await cloudSyncFunc();
-                            }
                           }}
                         ></input>
                       )}
                     </div>
-                    <div
-                      className="more-option-item"
-                      onClick={handleCloudImport}
-                    >
-                      <span className="more-option-text">
-                        <Trans>From cloud storage</Trans>
-                      </span>
-                    </div>
-                    <div
-                      className="more-option-item"
-                      onClick={handleOPDSImport}
-                    >
-                      <span className="more-option-text">
-                        <Trans>From OPDS</Trans>
-                      </span>
-                    </div>
-                    <div
-                      className="more-option-item"
-                      onClick={handleURLImport}
-                    >
-                      <span className="more-option-text">
-                        <Trans>From URL</Trans>
-                      </span>
-                    </div>
-                    {isElectron && (
+                                                                                {isElectron && (
                       <div
                         className="more-option-item"
                         onClick={handleAutoImport}
@@ -1483,13 +1033,6 @@ const ImportLocal = (props: ImportLocalProps) => {
                         error
                       );
                     }
-                  }
-                  if (
-                    ConfigService.getReaderConfig("isDisableAutoSync") !==
-                      "yes" &&
-                    ConfigService.getItem("defaultSyncOption")
-                  ) {
-                    await cloudSyncFunc();
                   }
                 }}
               ></div>

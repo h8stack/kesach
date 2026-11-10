@@ -9,8 +9,6 @@ import EditDialog from "../../components/dialogs/editDialog";
 import AddDialog from "../../components/dialogs/addDialog";
 import SortDialog from "../../components/dialogs/sortBookDialog";
 import LocalFileDialog from "../../components/dialogs/localFileDialog";
-import ImportDialog from "../../components/dialogs/importDialog";
-import OPDSDialog from "../../components/dialogs/opdsDialog";
 import AutoImportDialog from "../../components/dialogs/autoImportDialog";
 import { Trans } from "react-i18next";
 import SettingDialog from "../../components/dialogs/settingDialog";
@@ -35,7 +33,6 @@ import {
   isBookDragEvent,
   isExternalFileDragEvent,
 } from "../../utils/reader/bookDrag";
-import Footer from "../../components/footer";
 import ProtectionOverlay from "../../components/protection";
 import { useAppStore } from "../../store/useAppStore";
 
@@ -50,11 +47,7 @@ const Manager = () => {
   const books = useAppStore((s) => s.manager.books);
   const isShowPopupNote = useAppStore((s) => s.manager.isShowPopupNote);
   const importBookFunc = useAppStore((s) => s.book.importBookFunc);
-  const cloudSyncFunc = useAppStore((s) => s.book.cloudSyncFunc);
-  const isAuthed = useAppStore((s) => s.manager.isAuthed);
   const isSettingOpen = useAppStore((s) => s.manager.isSettingOpen);
-  const isOpenImportDialog = useAppStore((s) => s.backupPage.isOpenImportDialog);
-  const isOpenOPDSDialog = useAppStore((s) => s.backupPage.isOpenOPDSDialog);
   const isOpenAutoImportDialog = useAppStore(
     (s) => s.backupPage.isOpenAutoImportDialog
   );
@@ -62,7 +55,6 @@ const Manager = () => {
     (s) => s.backupPage.isOpenSortShelfDialog
   );
   const isShowNew = useAppStore((s) => s.manager.isShowNew);
-  const isShowSupport = useAppStore((s) => s.manager.isShowSupport);
   const isOpenDeleteDialog = useAppStore((s) => s.book.isOpenDeleteDialog);
   const isOpenDissolveDialog = useAppStore(
     (s) => s.book.isOpenDissolveDialog
@@ -106,10 +98,7 @@ const Manager = () => {
   const handleDetailDialog = useAppStore((s) => s.handleDetailDialog);
   const handleLoadingDialog = useAppStore((s) => s.handleLoadingDialog);
   const handleNewDialog = useAppStore((s) => s.handleNewDialog);
-  const handleShowSupport = useAppStore((s) => s.handleShowSupport);
   const handleLocalFileDialog = useAppStore((s) => s.handleLocalFileDialog);
-  const handleImportDialog = useAppStore((s) => s.handleImportDialog);
-  const handleOPDSDialog = useAppStore((s) => s.handleOPDSDialog);
   const handleAutoImportDialog = useAppStore((s) => s.handleAutoImportDialog);
   const handleShowPopupNote = useAppStore((s) => s.handleShowPopupNote);
   const handleSortShelfDialog = useAppStore((s) => s.handleSortShelfDialog);
@@ -306,12 +295,6 @@ const Manager = () => {
             }
             await importBookFunc(file);
           }
-          if (
-            ConfigService.getReaderConfig("isDisableAutoSync") !== "yes" &&
-            ConfigService.getItem("defaultSyncOption")
-          ) {
-            await cloudSyncFunc();
-          }
         }}
         onClick={() => {
           handleEditDialog(false);
@@ -320,13 +303,8 @@ const Manager = () => {
           handleAddDialog(false);
           handleDetailDialog(false);
           handleLoadingDialog(false);
-          if (!isAuthed) {
-            handleNewDialog(false);
-            handleShowSupport(false);
-          }
+          handleNewDialog(false);
           handleLocalFileDialog(false);
-          handleImportDialog(false);
-          handleOPDSDialog(false);
           handleAutoImportDialog(false);
           handleShowPopupNote(false);
           handleSortShelfDialog(false);
@@ -338,12 +316,9 @@ const Manager = () => {
         }}
         style={
           isSettingOpen ||
-          isOpenImportDialog ||
-          isOpenOPDSDialog ||
           isOpenAutoImportDialog ||
           isOpenSortShelfDialog ||
           isShowNew ||
-          isShowSupport ||
           isOpenDeleteDialog ||
           isOpenDissolveDialog ||
           isOpenEditDialog ||
@@ -400,8 +375,6 @@ const Manager = () => {
       {isShowLoading && <LoadingDialog />}
       {isSortDisplay && <SortDialog />}
       {isOpenLocalFileDialog && <LocalFileDialog />}
-      {isOpenImportDialog && <ImportDialog />}
-      {isOpenOPDSDialog && <OPDSDialog />}
       {isOpenAutoImportDialog && <AutoImportDialog />}
       {isOpenSortShelfDialog && <SortShelfDialog />}
       {isSettingOpen && <SettingDialog />}
@@ -420,7 +393,6 @@ const Manager = () => {
           ))}
         </Routes>
       )}
-      <Footer />
     </div>
   );
 };

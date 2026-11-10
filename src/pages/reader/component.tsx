@@ -17,7 +17,6 @@ import DatabaseService from "../../utils/storage/databaseService";
 import ConvertDialog from "../../components/dialogs/convertDialog";
 import ScalePageDialog from "../../components/dialogs/scalePageDialog";
 import PdfCropDialog from "../../components/dialogs/pdfCropDialog";
-import StudyLangDialog from "../../components/dialogs/studyLangDialog";
 import AssistReadDialog from "../../components/dialogs/assistReadDialog";
 import { isElectron } from "react-device-detect";
 import SettingDialog from "../../components/dialogs/settingDialog";
@@ -25,11 +24,6 @@ import SpeechDialog from "../../components/dialogs/speechDialog";
 import KeepMounted from "../../components/keepMounted";
 import AnnotationDialog from "../../components/dialogs/annotationDialog";
 import PopupOptionDialog from "../../components/dialogs/popupOptionDialog";
-import {
-  updateDiscordPresence,
-  clearDiscordPresence,
-} from "../../utils/reader/discordRPC";
-import SupportDialog from "../../components/dialogs/supportDialog";
 import ReaderTopToolbar from "../../components/readerTopToolbar";
 import { READING_PANEL_TOGGLE_EVENT } from "../../utils/reader/mouseEvent";
 import { isPaginatedBook, throttle } from "../../utils/common";
@@ -83,7 +77,6 @@ const Reader = () => {
   const isConvertOpen = useAppStore((s) => s.reader.isConvertOpen);
   const isScaleOpen = useAppStore((s) => s.reader.isScaleOpen);
   const isPdfCropOpen = useAppStore((s) => s.reader.isPdfCropOpen);
-  const isStudyLangOpen = useAppStore((s) => s.reader.isStudyLangOpen);
   const isAssistReadOpen = useAppStore((s) => s.reader.isAssistReadOpen);
   const isSpeechOpen = useAppStore((s) => s.reader.isSpeechOpen);
   const isAnnotationOpen = useAppStore((s) => s.reader.isAnnotationOpen);
@@ -105,12 +98,9 @@ const Reader = () => {
   const handleConvertDialog = useAppStore((s) => s.handleConvertDialog);
   const handleScalePageDialog = useAppStore((s) => s.handleScalePageDialog);
   const handlePdfCropDialog = useAppStore((s) => s.handlePdfCropDialog);
-  const handleStudyLangDialog = useAppStore((s) => s.handleStudyLangDialog);
   const handleAssistReadDialog = useAppStore((s) => s.handleAssistReadDialog);
-  const handleFetchAuthed = useAppStore((s) => s.handleFetchAuthed);
   const handleSpeechDialog = useAppStore((s) => s.handleSpeechDialog);
   const handleAnnotationDialog = useAppStore((s) => s.handleAnnotationDialog);
-  const handleFetchUserInfo = useAppStore((s) => s.handleFetchUserInfo);
   const handleBackgroundColor = useAppStore((s) => s.handleBackgroundColor);
   const { t } = useTranslation();
   const currentProps = {
@@ -122,7 +112,6 @@ const Reader = () => {
     isConvertOpen,
     isScaleOpen,
     isPdfCropOpen,
-    isStudyLangOpen,
     isAssistReadOpen,
     isSpeechOpen,
     isAnnotationOpen,
@@ -140,12 +129,9 @@ const Reader = () => {
     handleConvertDialog,
     handleScalePageDialog,
     handlePdfCropDialog,
-    handleStudyLangDialog,
     handleAssistReadDialog,
-    handleFetchAuthed,
     handleSpeechDialog,
     handleAnnotationDialog,
-    handleFetchUserInfo,
     handleBackgroundColor,
   };
   const propsRef = useLatest(currentProps);
@@ -322,7 +308,6 @@ const Reader = () => {
     propsRef.current.handleScalePageDialog(false);
     propsRef.current.handleConvertDialog(false);
     propsRef.current.handlePdfCropDialog(false);
-    propsRef.current.handleStudyLangDialog(false);
     propsRef.current.handleAssistReadDialog(false);
     propsRef.current.handleSpeechDialog(false);
   };
@@ -440,18 +425,6 @@ const Reader = () => {
         window.currentBookKey = "";
       }
       propsRef.current.handleFetchBooks();
-      propsRef.current.handleFetchAuthed();
-      if (
-        key &&
-        ConfigService.getAllListConfig("convertPDFBooks").includes(key) &&
-        ConfigService.getReaderConfig(
-          propsRef.current.currentBook?.description?.indexOf("scanned") > -1
-            ? "scannedOcrEngine"
-            : "textOcrEngine"
-        ) === "official-ai-ocr"
-      ) {
-        await propsRef.current.handleFetchUserInfo();
-      }
       DatabaseService.getRecord(key, "books").then((book: Book | null) => {
         book = book || JSON.parse(ConfigService.getItem("tempBook") || "{}");
         if (!book) return;
@@ -470,7 +443,6 @@ const Reader = () => {
         );
         updateState({ totalDuration: savedTotal, currentDuration: 0 });
         if (isElectron) {
-          updateDiscordPresence(book);
         }
       });
     };
@@ -576,7 +548,6 @@ const Reader = () => {
         hideQuickButtonsTimerRef.current = null;
       }
       if (isElectron) {
-        clearDiscordPresence();
       }
       if (tickTimerRef.current) {
         clearInterval(tickTimerRef.current);
@@ -808,9 +779,6 @@ const Reader = () => {
         <KeepMounted open={isPdfCropOpen}>
           <PdfCropDialog />
         </KeepMounted>
-        <KeepMounted open={isStudyLangOpen}>
-          <StudyLangDialog />
-        </KeepMounted>
         <KeepMounted open={isAssistReadOpen}>
           <AssistReadDialog />
         </KeepMounted>
@@ -819,7 +787,6 @@ const Reader = () => {
         </KeepMounted>
       </div>
       {isAnnotationOpen && <AnnotationDialog />}
-      <SupportDialog />
       {isOpenPopupOptionDialog && (
         <>
           <PopupOptionDialog />

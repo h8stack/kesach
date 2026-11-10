@@ -3,11 +3,7 @@ import { useEffect, useState } from "react";
 import "./dictSetting.css";
 import { Trans } from "react-i18next";
 import toast from "react-hot-toast";
-import DictUtil, {
-  CloudDictItem,
-  DictMeta,
-} from "../../../utils/file/dictUtil";
-import { KookitConfig } from "../../../assets/lib/kookit-extra-browser.min";
+import DictUtil, { DictMeta } from "../../../utils/file/dictUtil";
 import { useAppStore } from "../../../store/useAppStore";
 
 const DICT_KIND_LABEL: Record<string, string> = {
@@ -22,18 +18,13 @@ const DICT_KIND_LABEL: Record<string, string> = {
 export interface SettingInfoState {
   dicts: DictMeta[];
   isLoading: boolean;
-  downloadingId: string;
-  downloadProgress: number;
 }
 
 const DictSetting = () => {
-  const isAuthed = useAppStore((s) => s.manager.isAuthed);
   const handleFetchPlugins = useAppStore((s) => s.handleFetchPlugins);
   const { t } = useTranslation();
   const [dicts, setDicts] = useState<DictMeta[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [downloadingId, setDownloadingId] = useState("");
-  const [downloadProgress, setDownloadProgress] = useState(0);
 
   const loadDicts = () => {
     const ids = DictUtil.getDictIds();
@@ -89,107 +80,6 @@ const DictSetting = () => {
     }
   };
 
-  const isCloudDictInstalled = (dictId: string) => {
-    return DictUtil.getDictIds().includes(dictId);
-  };
-
-  const handleDownloadCloudDict = async (dict: CloudDictItem) => {
-    if (isCloudDictInstalled(dict.id)) {
-      toast.success(t("Dictionary already downloaded"));
-      return;
-    }
-    if (downloadingId) return;
-
-    setDownloadingId(dict.id); setDownloadProgress(0);
-    try {
-      const success = await DictUtil.downloadCloudDict(
-        dict,
-        isAuthed,
-        (progress) => {
-          setDownloadProgress(progress);
-        }
-      );
-      if (success) {
-        loadDicts();
-        handleFetchPlugins();
-        toast.success(t("Download successful"));
-      } else {
-        toast.error(t("Download failed"));
-      }
-    } catch (err) {
-      console.error(err);
-      toast.error(t("Download failed"));
-    } finally {
-      setDownloadingId(""); setDownloadProgress(0);
-    }
-  };
-
-  const renderCloudDictSection = () => {
-    return (
-      <div className="dict-cloud-section">
-        <div className="dict-cloud-section-title">
-          <Trans>Download open dictionaries</Trans>
-        </div>
-        <div className="dict-cloud-list">
-          {KookitConfig.CloudDictList.map((dict) => {
-            const installed = isCloudDictInstalled(dict.id);
-            const isDownloading = downloadingId === dict.id;
-            return (
-              <div key={dict.id} className="dict-cloud-item">
-                <div className="dict-cloud-item-row">
-                  <div className="dict-cloud-item-info">
-                    <span className="dict-cloud-item-name">
-                      {DictUtil.getCloudDictDisplayName(dict)}
-                    </span>
-                    <span className="dict-cloud-item-source">
-                      <Trans>Source</Trans>
-                      {": "}
-                      {dict.source}
-                    </span>
-                  </div>
-                  {installed ? (
-                    <span
-                      style={{
-                        opacity: 0.5,
-                        fontSize: 13,
-                        padding: "4px 10px",
-                        borderRadius: 6,
-                        background: "transparent",
-                      }}
-                    >
-                      <Trans>Installed</Trans>
-                    </span>
-                  ) : (
-                    <button
-                      className="dict-cloud-download-btn"
-                      disabled={!!downloadingId && !isDownloading}
-                      onClick={() => handleDownloadCloudDict(dict)}
-                    >
-                      {isDownloading ? (
-                        <Trans>Downloading</Trans>
-                      ) : (
-                        <Trans>Download</Trans>
-                      )}
-                    </button>
-                  )}
-                </div>
-                {isDownloading && (
-                  <div className="dict-cloud-progress">
-                    <div
-                      className="dict-cloud-progress-bar"
-                      style={{
-                        width: `${Math.round(downloadProgress * 100)}%`,
-                      }}
-                    />
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
-      </div>
-    );
-  };
 
   return (
       <>
@@ -251,7 +141,6 @@ const DictSetting = () => {
           )}
         </div>
 
-        {renderCloudDictSection()}
 
         {/* Import button */}
         <div

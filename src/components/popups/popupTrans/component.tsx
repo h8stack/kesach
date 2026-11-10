@@ -10,7 +10,6 @@ import axios from "axios";
 import { Trans } from "react-i18next";
 import toast from "react-hot-toast";
 import { getDefaultTransTarget, openExternalUrl } from "../../../utils/common";
-import { getTransStream } from "../../../utils/request/reader";
 import { chatStream } from "../../../utils/request/common";
 import { getIframeDoc } from "../../../utils/reader/docUtil";
 import { getBuiltinTranslation } from "../../../utils/plugins/rendererRegistry";
@@ -37,7 +36,6 @@ export interface PopupTransState {
 const PopupTrans = (props: PopupTransProps) => {
   const originalText = useAppStore((s) => s.reader.originalText);
   const plugins = useAppStore((s) => s.manager.plugins);
-  const isAuthed = useAppStore((s) => s.manager.isAuthed);
   const currentBook = useAppStore((s) => s.book.currentBook);
   const handleOpenMenu = useAppStore((s) => s.handleOpenMenu);
   const handleMenuMode = useAppStore((s) => s.handleMenuMode);
@@ -198,46 +196,6 @@ const PopupTrans = (props: PopupTransProps) => {
         isFinishOutput: true,
         isAiWaiting: false,
       }));
-    } else if (
-      isAuthed &&
-      ConfigService.getReaderConfig("isDisableAI") !== "yes"
-    ) {
-      setState((prev) => ({
-        ...prev,
-        transService: "official-ai-trans-plugin",
-        isAddNew: false,
-      }));
-      let plugin = plugins.find(
-        (item) => item.key === "official-ai-trans-plugin"
-      );
-      if (!plugin) {
-        return;
-      }
-      let targetLang =
-        ConfigService.getReaderConfig("transTarget") ||
-        getDefaultTransTarget(plugin.langList);
-      if (targetLang === "Traditional Chinese") {
-        targetLang = "繁体中文";
-      }
-      textAccumulator.current = "";
-      startUpdateInterval();
-      await getTransStream(
-        text,
-        ConfigService.getReaderConfig("transSource") || "Automatic",
-        ConfigService.getReaderConfig("transTarget") ||
-          getDefaultTransTarget(plugin.langList),
-        (result) => {
-          if (result && result.done) {
-            return;
-          }
-          if (result && result.text) {
-            textAccumulator.current += result.text;
-          }
-        }
-      );
-      stopUpdateInterval();
-      textAccumulator.current = "";
-      setState((prev) => ({ ...prev, isFinishOutput: true }));
     }
   };
 
@@ -258,16 +216,6 @@ const PopupTrans = (props: PopupTransProps) => {
           setState((prev) => ({ ...prev, transService: pluginList[0].key }));
           ConfigService.setReaderConfig("transService", pluginList[0].key);
           await new Promise((resolve) => setTimeout(resolve, 100));
-        } else if (isAuthed) {
-          setState((prev) => ({
-            ...prev,
-            transService: "official-ai-trans-plugin",
-            isAddNew: false,
-          }));
-          ConfigService.setReaderConfig(
-            "transService",
-            "official-ai-trans-plugin"
-          );
         } else {
           setState((prev) => ({ ...prev, isAddNew: true }));
         }
@@ -302,12 +250,6 @@ const PopupTrans = (props: PopupTransProps) => {
   }, [originalText]);
 
   const handleChangeService = (target: string) => {
-    if (target === "official-ai-trans-plugin" && !isAuthed) {
-      toast(t("Please upgrade to Pro to use this feature"));
-      handleSetting(true);
-      handleSettingMode("account");
-      return;
-    }
     setState((prev) => ({ ...prev, transService: target }));
     ConfigService.setReaderConfig("transService", target);
     let plugin = plugins.find((item) => item.key === target);
@@ -357,12 +299,6 @@ const PopupTrans = (props: PopupTransProps) => {
                 >
                   <span className={`icon-${item.icon} trans-icon`}></span>
                   {t(item.displayName)}
-                  {item.key === "official-ai-trans-plugin" && (
-                    <span style={{ fontSize: "13px", color: "#f16464" }}>
-                      {" "}
-                      (Pro)
-                    </span>
-                  )}
                 </div>
               );
             })}

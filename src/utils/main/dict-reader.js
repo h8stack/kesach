@@ -6,7 +6,7 @@
  * - ssnangua/ColorTxt/src/main/dictionary (MPL-2.0)
  *
  * readest is licensed under AGPL-3.0; ColorTxt is licensed under MPL-2.0.
- * This file is part of Koodo Reader, which is distributed under AGPL-3.0.
+ * This file is part of KeSach, which is distributed under AGPL-3.0.
  *
  * All local dictionary parsing lives in this file so the Electron main
  * process only needs one require.  Renderer-side metadata stays in
@@ -130,11 +130,21 @@ async function readAt(fh, start, size) {
   return buffer.subarray(0, bytesRead);
 }
 
+// Windows paths use backslashes even when the tests (or a library created on
+// Windows) run on POSIX.  path.basename only understands the host separator,
+// so normalize both separators before extracting the last segment.
+function getBaseName(value) {
+  const segments = String(value)
+    .split(/[\\/]+/)
+    .filter(Boolean);
+  return segments.length ? segments[segments.length - 1] : "";
+}
+
 function isSafeId(id) {
   if (typeof id !== "string" || !id) return false;
   if (id === "." || id === "..") return false;
   if (id.includes("/") || id.includes("\\")) return false;
-  if (path.basename(id) !== id) return false;
+  if (getBaseName(id) !== id) return false;
   return true;
 }
 
@@ -142,7 +152,7 @@ function isSafeFileName(name) {
   if (typeof name !== "string" || !name) return false;
   if (name === "." || name === "..") return false;
   if (name.includes("/") || name.includes("\\")) return false;
-  return path.basename(name) === name;
+  return getBaseName(name) === name;
 }
 
 function safeJoin(dir, name) {
@@ -1827,7 +1837,7 @@ class BglReader {
 /* -------------------------------------------------------------------------- */
 
 function classifyFile(filePath) {
-  const name = path.basename(filePath);
+  const name = getBaseName(filePath);
   const lower = name.toLowerCase();
   const lastDot = lower.lastIndexOf(".");
   const extension = lastDot >= 0 ? lower.slice(lastDot + 1) : "";

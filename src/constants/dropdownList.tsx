@@ -54,7 +54,7 @@ export const codeHighlightLangList = [
 
 export const dropdownList = [
   {
-    title: "Book layout",
+    title: "Book/Document layout",
     group: "layout",
     value: "bookLayout",
     option: [
@@ -458,25 +458,9 @@ export interface OcrEngineOption {
 export const ocrEngineList: OcrEngineOption[] = [
   { label: "Please select", value: "", lang: "" },
   {
-    label: "Official AI OCR",
-    value: "official-ai-ocr",
-    lang: "general",
-    isPro: true,
-  },
-  {
     label: "System OCR",
     value: "system-ocr",
     lang: "auto",
-  },
-  {
-    label: "Paddle OCR",
-    value: "paddle",
-    lang: "standard_v5_mobile",
-  },
-  {
-    label: "Tesseract",
-    value: "tesseract",
-    lang: "chi_sim",
   },
 ];
 export const getOcrEngineList = (

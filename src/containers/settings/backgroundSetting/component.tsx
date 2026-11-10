@@ -21,92 +21,28 @@ export interface SettingInfoState {
   /** loaded dataUrls keyed by image id */
   loadedUrls: Record<string, string>;
   previewImage: BackgroundImage | null;
-  /** featured background index currently in preview */
-  previewFeatured: number | null;
   appBackgroundId: string;
   readerBackgroundId: string;
   isLoading: boolean;
-  /** featured indexes whose thumbnail has entered the viewport */
-  visibleFeatured: Set<number>;
-  /** id of the featured background being downloaded */
-  downloadingId: string;
-  downloadProgress: number;
 }
 
-const FEATURED_COUNT = 100;
-
 const BackgroundSetting = () => {
-  const isAuthed = useAppStore((s) => s.manager.isAuthed);
   const handleReaderBackgroundImage = useAppStore(
     (s) => s.handleReaderBackgroundImage
   );
   const { t } = useTranslation();
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const featuredObserver = useRef<IntersectionObserver | null>(null);
-  const pendingFeaturedElements = useRef<HTMLDivElement[]>([]);
 
   const [state, setState] = useState<SettingInfoState>({
     images: [],
     loadedUrls: {},
     previewImage: null,
-    previewFeatured: null,
     appBackgroundId:
       ConfigService.getReaderConfig("appBackgroundImage") || "",
     readerBackgroundId:
       ConfigService.getReaderConfig("readerBackgroundImage") || "",
     isLoading: true,
-    visibleFeatured: new Set<number>(),
-    downloadingId: "",
-    downloadProgress: 0,
   });
-
-  const setupFeaturedObserver = () => {
-    if (typeof IntersectionObserver === "undefined") return;
-    const root = document.querySelector(".setting-dialog-info");
-    featuredObserver.current = new IntersectionObserver(
-      (entries) => {
-        const newlyVisible: number[] = [];
-        entries.forEach((entry) => {
-          if (!entry.isIntersecting) return;
-          const index = Number(
-            (entry.target as HTMLElement).dataset.featuredIndex
-          );
-          if (Number.isNaN(index)) return;
-          newlyVisible.push(index);
-        });
-        if (newlyVisible.length > 0) {
-          setState((prev) => {
-            const next = new Set(prev.visibleFeatured);
-            let hasNew = false;
-            newlyVisible.forEach((index) => {
-              if (!next.has(index)) {
-                next.add(index);
-                hasNew = true;
-              }
-            });
-            return hasNew ? { ...prev, visibleFeatured: next } : prev;
-          });
-        }
-      },
-      { root, rootMargin: "120px 0px" }
-    );
-    pendingFeaturedElements.current.forEach((el) =>
-      featuredObserver.current!.observe(el)
-    );
-    pendingFeaturedElements.current = [];
-  };
-
-  const registerFeaturedItem = (index: number) => {
-    return (el: HTMLDivElement | null) => {
-      if (!el) return;
-      el.dataset.featuredIndex = String(index);
-      if (featuredObserver.current) {
-        featuredObserver.current.observe(el);
-      } else {
-        pendingFeaturedElements.current.push(el);
-      }
-    };
-  };
 
   const loadAllImages = async () => {
     setState((prev) => ({ ...prev, isLoading: true }));
@@ -133,10 +69,6 @@ const BackgroundSetting = () => {
 
   useEffect(() => {
     loadAllImages();
-    setupFeaturedObserver();
-    return () => {
-      featuredObserver.current?.disconnect();
-    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -235,87 +167,6 @@ const BackgroundSetting = () => {
     ConfigService.setReaderConfig("backgroundColor", "");
   };
 
-  const getFeaturedImage = (index: number): BackgroundImage | undefined => {
-    const id = BackgroundUtil.getFeaturedBackgroundId(index);
-    return state.images.find((img) => img.id === id);
-  };
-
-  const handleFeaturedPreview = (index: number) => {
-    const existing = getFeaturedImage(index);
-    if (existing) {
-      handlePreview(existing);
-    } else {
-      setState((prev) => ({ ...prev, previewFeatured: index }));
-    }
-  };
-
-  const handleCloseFeaturedPreview = () => {
-    setState((prev) => ({ ...prev, previewFeatured: null }));
-  };
-
-  const handleFeaturedSetBackground = async (
-    index: number,
-    type: "app" | "reader"
-  ) => {
-    const id = BackgroundUtil.getFeaturedBackgroundId(index);
-    if (state.downloadingId) return;
-    const existing = getFeaturedImage(index);
-    if (existing) {
-      if (type === "app") {
-        handleSetAppBackground(existing);
-      } else {
-        handleSetReaderBackground(existing);
-      }
-      return;
-    }
-
-    setState((prev) => ({
-      ...prev,
-      downloadingId: id,
-      downloadProgress: 0,
-    }));
-    try {
-      const dataUrl = await BackgroundUtil.downloadFeaturedBackground(
-        index,
-        isAuthed,
-        (progress) =>
-          setState((prev) => ({ ...prev, downloadProgress: progress }))
-      );
-      if (!dataUrl) {
-        toast.error(t("Download failed"));
-        return;
-      }
-      const meta = BackgroundUtil.getImageMeta(id);
-      const newImage: BackgroundImage = {
-        id,
-        name: meta?.name || id,
-        extension: meta?.extension || "png",
-        backgroundColor: meta?.backgroundColor,
-        textColor: meta?.textColor,
-      };
-      setState((prev) => ({
-        ...prev,
-        images: [...prev.images, newImage],
-        loadedUrls: { ...prev.loadedUrls, [id]: dataUrl },
-      }));
-      if (type === "app") {
-        handleSetAppBackground(newImage);
-      } else {
-        handleSetReaderBackground(newImage);
-      }
-      toast.success(t("Download successful"));
-    } catch (err) {
-      console.error(err);
-      toast.error(t("Download failed"));
-    } finally {
-      setState((prev) => ({
-        ...prev,
-        downloadingId: "",
-        downloadProgress: 0,
-      }));
-    }
-  };
-
   const handleDelete = async (e: React.MouseEvent, image: BackgroundImage) => {
     e.stopPropagation();
     try {
@@ -408,118 +259,7 @@ const BackgroundSetting = () => {
     );
   };
 
-  const renderFeaturedPreviewActions = (index: number) => {
-    const id = BackgroundUtil.getFeaturedBackgroundId(index);
-    const isDownloading = state.downloadingId === id;
-    const percent = Math.round(state.downloadProgress * 100);
-    const isApp = state.appBackgroundId === id;
-    const isReader = state.readerBackgroundId === id;
-    return (
-      <div
-        className="background-preview-actions"
-        onClick={(e) => e.stopPropagation()}
-      >
-        {isApp ? (
-          <span
-            className="change-location-button background-apple-button"
-            onClick={handleClearAppBackground}
-          >
-            <Trans>Clear app background</Trans>
-          </span>
-        ) : (
-          <span
-            className={
-              "change-location-button background-apple-button" +
-              (isDownloading ? " is-downloading" : "")
-            }
-            onClick={() => handleFeaturedSetBackground(index, "app")}
-          >
-            {isDownloading ? (
-              <span>
-                <Trans>Downloading</Trans> {percent}%
-              </span>
-            ) : (
-              <Trans>Set as app background</Trans>
-            )}
-          </span>
-        )}
-        {isReader ? (
-          <span
-            className="change-location-button background-apple-button"
-            onClick={handleClearReaderBackground}
-          >
-            <Trans>Clear book background</Trans>
-          </span>
-        ) : (
-          <span
-            className={
-              "change-location-button background-apple-button" +
-              (isDownloading ? " is-downloading" : "")
-            }
-            onClick={() => handleFeaturedSetBackground(index, "reader")}
-          >
-            {isDownloading ? (
-              <span>
-                <Trans>Downloading</Trans> {percent}%
-              </span>
-            ) : (
-              <Trans>Set as book background</Trans>
-            )}
-          </span>
-        )}
-      </div>
-    );
-  };
-
-  const renderFeaturedSection = () => {
-    const { visibleFeatured, appBackgroundId, readerBackgroundId } = state;
-    const indices = Array.from({ length: FEATURED_COUNT }, (_, i) => i + 1);
-    return (
-      <div className="background-featured-section">
-        <div className="background-featured-section-title">
-          <Trans>Download featured backgrounds</Trans>
-          <span className="background-featured-section-note">
-            <Trans>Generated with AI</Trans>
-          </span>
-        </div>
-        <div className="background-featured-grid">
-          {indices.map((index) => {
-            const id = BackgroundUtil.getFeaturedBackgroundId(index);
-            const isActive =
-              appBackgroundId === id || readerBackgroundId === id;
-            return (
-              <div
-                key={index}
-                className={
-                  "background-featured-item" +
-                  (isActive ? " active-bg-item" : "")
-                }
-                ref={registerFeaturedItem(index)}
-                onClick={() => handleFeaturedPreview(index)}
-              >
-                {visibleFeatured.has(index) ? (
-                  <img
-                    className="background-featured-img"
-                    src={BackgroundUtil.getFeaturedThumbnailUrl(
-                      index,
-                      isAuthed
-                    )}
-                    alt={id}
-                    loading="lazy"
-                  />
-                ) : (
-                  <div className="background-featured-img background-featured-placeholder" />
-                )}
-              </div>
-            );
-          })}
-        </div>
-      </div>
-    );
-  };
-
-  const { images, previewImage, previewFeatured, loadedUrls, isLoading } =
-    state;
+  const { images, previewImage, loadedUrls, isLoading } = state;
 
   return (
     <>
@@ -565,8 +305,6 @@ const BackgroundSetting = () => {
         )}
       </div>
 
-      {renderFeaturedSection()}
-
       {/* Hidden file input */}
       <input
         ref={fileInputRef}
@@ -603,28 +341,6 @@ const BackgroundSetting = () => {
         </div>
       )}
 
-      {/* Featured preview overlay */}
-      {previewFeatured !== null && !previewImage && (
-        <div
-          className="background-preview-overlay"
-          onClick={handleCloseFeaturedPreview}
-        >
-          <span
-            className="background-preview-close icon-close"
-            onClick={handleCloseFeaturedPreview}
-          />
-          <img
-            className="background-preview-image"
-            src={BackgroundUtil.getFeaturedOriginalUrl(
-              previewFeatured,
-              isAuthed
-            )}
-            alt={BackgroundUtil.getFeaturedBackgroundId(previewFeatured)}
-            onClick={(e) => e.stopPropagation()}
-          />
-          {renderFeaturedPreviewActions(previewFeatured)}
-        </div>
-      )}
     </>
   );
 };

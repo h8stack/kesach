@@ -6,12 +6,10 @@ import {
   CommonTool,
   ConfigService,
 } from "../../assets/lib/kookit-extra-browser.min";
-import { getCloudConfig } from "./common";
 import DatabaseService from "../storage/databaseService";
 import { saveAs } from "file-saver";
 import JSZip from "jszip";
 import ConfigUtil from "./configUtil";
-import SyncService from "../storage/syncService";
 import BackgroundUtil from "./backgroundUtil";
 import FontUtil from "./fontUtil";
 import toast from "react-hot-toast";
@@ -26,7 +24,7 @@ export const backup = async (service: string): Promise<BackupResult> => {
   let fileName = "data.zip";
   if (service === "local") {
     let now = new Date();
-    fileName = `KoodoReader-Backup-${now.getFullYear()}-${
+    fileName = `KeSach-Backup-${now.getFullYear()}-${
       now.getMonth() + 1
     }-${now.getDate()}-${Date.now()}.zip`;
   }
@@ -60,34 +58,14 @@ export const backup = async (service: string): Promise<BackupResult> => {
     if (!backupResult) {
       return "failed";
     }
-    if (service === "local") {
-      return "success";
-    } else {
-      let tokenConfig = await getCloudConfig(service);
-
-      return (await ipcRenderer.invoke("cloud-upload", {
-        ...tokenConfig,
-        fileName: "data.zip",
-        service: service,
-        type: "backup",
-        storagePath: getStorageLocation(),
-      }))
-        ? "success"
-        : "failed";
-    }
+    return "success";
   } else {
     let blob: Blob | boolean = await backupFromStorage();
     if (!blob) {
       return "failed";
     }
-    if (service === "local") {
-      saveAs(blob as Blob, fileName);
-      return "success";
-    } else {
-      let syncUtil = await SyncService.getSyncUtil();
-      let result = await syncUtil.uploadFile(fileName, "backup", blob as Blob);
-      return result ? "success" : "failed";
-    }
+    saveAs(blob as Blob, fileName);
+    return "success";
   }
 };
 export const generateSnapshot = async () => {
@@ -212,7 +190,7 @@ export const backupFromPath = async (
 
   // config 目录下需要入包的相对路径（*.db / config.json / sync.json）
   const configFiles: string[] = [];
-  for (const configFile of ["config.json", "sync.json"]) {
+  for (const configFile of ["config.json"]) {
     const sourcePath = path.join(dataPath, "config", configFile);
     if (fs.existsSync(sourcePath)) {
       configFiles.push(path.posix.join("config", configFile));
@@ -258,7 +236,6 @@ export const backupFromStorage = async () => {
   let words = await DatabaseService.getDbBuffer("words");
   let plugins = await DatabaseService.getDbBuffer("plugins");
   let config = JSON.stringify(await ConfigUtil.dumpConfig("config"));
-  let sync = JSON.stringify(await ConfigUtil.dumpConfig("sync"));
   await zipCover(zip);
   await zipBook(zip);
   await zipBackground(zip);
@@ -270,8 +247,7 @@ export const backupFromStorage = async () => {
     bookmarks,
     words,
     plugins,
-    config,
-    sync
+    config
   );
   if (!result) return false;
   return await zip.generateAsync({ type: "blob" });
@@ -381,8 +357,7 @@ export const zipConfig = (
   bookmarkBuffer: ArrayBuffer,
   wordBuffer: ArrayBuffer,
   pluginBuffer: ArrayBuffer,
-  config: string,
-  sync: string
+  config: string
 ) => {
   return new Promise<boolean>((resolve) => {
     try {
@@ -393,8 +368,7 @@ export const zipConfig = (
         .file("bookmarks.db", bookmarkBuffer)
         .file("words.db", wordBuffer)
         .file("plugins.db", pluginBuffer)
-        .file("config.json", config)
-        .file("sync.json", sync);
+        .file("config.json", config);
       resolve(true);
     } catch (error) {
       const errorMessage =

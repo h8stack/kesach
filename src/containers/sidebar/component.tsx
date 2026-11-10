@@ -4,13 +4,10 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import "./sidebar.css";
 import { sideMenu } from "../../constants/sideMenu";
 import { ConfigService } from "../../assets/lib/kookit-extra-browser.min";
-import { getWebsiteUrl, openInBrowser } from "../../utils/common";
 import { Trans } from "react-i18next";
 import toast from "react-hot-toast";
-import logoDark from "../../assets/images/logo-dark.png";
-import logoDarkPro from "../../assets/images/logo-dark-pro.png";
-import logoLight from "../../assets/images/logo-light.png";
-import logoLightPro from "../../assets/images/logo-light-pro.png";
+import logoDark from "../../assets/images/logo-dark.svg";
+import logoLight from "../../assets/images/logo-light.svg";
 import {
   addBooksToFavorite,
   addBooksToShelf,
@@ -35,7 +32,6 @@ const Sidebar = () => {
   const mode = useAppStore((s) => s.sidebar.mode);
   const isCollapsed = useAppStore((s) => s.sidebar.isCollapsed);
   const shelfTitle = useAppStore((s) => s.sidebar.shelfTitle);
-  const isAuthed = useAppStore((s) => s.manager.isAuthed);
   const isOpenSortShelfDialog = useAppStore(
     (s) => s.backupPage.isOpenSortShelfDialog
   );
@@ -116,9 +112,6 @@ const Sidebar = () => {
     setState((prev) => ({ ...prev, isCollapsed }));
     handleCollapse(isCollapsed);
     ConfigService.setReaderConfig("isCollapsed", isCollapsed ? "yes" : "no");
-  };
-  const handleJump = (url: string) => {
-    openInBrowser(url);
   };
   const handleCreateShelf = () => {
     if (!state.newShelfName) {
@@ -415,17 +408,10 @@ const Sidebar = () => {
             ConfigService.getReaderConfig("appSkin") === "night" ||
             (ConfigService.getReaderConfig("appSkin") === "system" &&
               ConfigService.getReaderConfig("isOSNight") === "yes")
-              ? isAuthed
-                ? logoDarkPro
-                : logoDark
-              : isAuthed
-              ? logoLightPro
+              ? logoDark
               : logoLight
           }
           alt=""
-          onClick={() => {
-            handleJump(getWebsiteUrl());
-          }}
           style={isCollapsed ? { display: "none" } : {}}
           className="logo"
         />

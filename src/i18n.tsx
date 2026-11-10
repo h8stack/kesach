@@ -1,6 +1,7 @@
 import i18n from "i18next";
 import { initReactI18next } from "react-i18next";
 import translationEN from "./assets/locales/en.json";
+import translationVI from "./assets/locales/vi.json";
 
 const localeModules = import.meta.glob("./assets/locales/*.json");
 
@@ -40,8 +41,11 @@ i18n
       en: {
         translation: translationEN,
       },
+      vi: {
+        translation: translationVI,
+      },
     },
-    lng: "en",
+    lng: "vi",
     fallbackLng: "en",
     keySeparator: false, // we do not use keys in form messages.welcome
     interpolation: {

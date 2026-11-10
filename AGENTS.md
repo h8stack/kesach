@@ -1,12 +1,12 @@
 ## Architecture Overview
 
-Koodo Reader 是一个跨平台电子书阅读器（Electron + Vite + React 19 + Zustand）。
+KeSach 是一个跨平台电子书阅读器（基于 Koodo Reader fork，Electron + Vite + React 19 + Zustand）。应用为 100% 离线：无登录、无账号、无云同步。
 
 ### 四层架构
 
 | 层              | 位置                                  | 职责                                                    |
 | --------------- | ------------------------------------- | ------------------------------------------------------- |
-| Electron 主进程 | `main.js`                             | IPC handlers, SQLite (better-sqlite3), 云同步, 原生集成 |
+| Electron 主进程 | `main.js`                             | IPC handlers, SQLite (better-sqlite3), 原生集成 |
 | React 渲染进程  | `src/`                                | UI, Zustand 状态管理, 书籍渲染                          |
 | 阅读引擎        | `src/assets/lib/kookit-extra.min.mjs` | 闭源 ESM — 书籍解析、SQL 语句、同步工具                 |
 | Go HTTP 服务    | `httpserver/`                         | 可选的 KOReader / OPDS 集成                             |
@@ -28,7 +28,6 @@ Koodo Reader 是一个跨平台电子书阅读器（Electron + Vite + React 19 +
 
 - `open-book` / `new-tab` / `exit-tab` — 窗口生命周期
 - `database-command` — 数据库操作（所有数据库操作必须通过此通道）
-- `cloud-upload` / `cloud-download` — 云同步
 - `before-reader-close` → `reader-close-ready` — 阅读器两阶段关闭
 
 ### Zustand Store
@@ -60,7 +59,7 @@ const handleFetchBooks = useAppStore((s) => s.handleFetchBooks);
 
 - `/manager/*` — 主界面（书库、笔记、回收站等）
 - `/epub/*`, `/pdf/*`, `/mobi/*`, `/txt/*`, `/md/*` 等格式路径 — 阅读器
-- `/login`, `/stats`
+- `/stats`
 - `/` — 重定向入口
 
 注意：v7 默认精确匹配，带子路径的路由必须使用 `/*` 通配符。
@@ -70,6 +69,8 @@ const handleFetchBooks = useAppStore((s) => s.handleFetchBooks);
 EPUB, PDF, MOBI, AZW3, AZW, TXT, FB2, CBR/CBZ/CBT/CB7, PPTX/PPT, XPS/OXPS, DJVU/DJV, OFD, MD, DOCX/DOC, RTF, CAJ, HTML/XML/XHTML/MHTML/HTM
 
 ## 常用命令
+
+> 项目固定使用 Yarn 1（见 `package.json` 的 `packageManager`），请勿用 Yarn 4 重写 `yarn.lock`。
 
 ```bash
 # 安装依赖（初次）
@@ -101,6 +102,9 @@ yarn release
 
 # 重新编译原生模块
 yarn rebuild
+
+# 重新生成应用/格式图标（需要 rsvg-convert 与 ImageMagick）
+python3 scripts/generate-icons.py
 ```
 
 ## 开发规范
@@ -120,6 +124,8 @@ yarn rebuild
 - 添加窗口打开通道时需遵循 `new-tab` → `WebContentsView` / `open-book` → `BrowserWindow` 模式
 - 所有 IPC 参数需校验后再执行文件系统/数据库/Shell 操作
 - 不要将令牌、密码或完整书籍路径记录到 info 级别日志
+- 用户搜索统一使用 `src/utils/file/searchUtil.ts`（越南语去声调匹配 + 结果缓存）；阅读器内搜索使用 `buildInBookSearchIndex` / `searchInBookIndex` 的章节索引（支持 EPUB HTML 与 PDF 文本层），不要依赖引擎 `doSearch` 的变音匹配
+- 不要用 SQL `LIKE` 做文本搜索
 - 单元测试使用 Vitest（`src/**/*.test.ts`）；E2E 后续使用 Playwright
 
 ## 项目结构

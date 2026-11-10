@@ -146,7 +146,7 @@ const SELECTION_SHORTCUT_OPTIONS: Array<{
   { shortcut: "selectionSearch", optionName: "search-book" },
 ];
 
-export const READING_PANEL_TOGGLE_EVENT = "koodo-reading-panel-toggle";
+export const READING_PANEL_TOGGLE_EVENT = "kesach-reading-panel-toggle";
 
 export const openReadingPanel = (position: "left" | "right") => {
   const panel = document.querySelector(`.${position}-panel`);
@@ -170,7 +170,7 @@ const READING_PANEL_SHORTCUTS: Array<{
   { shortcut: "openRightPanel", position: "right" },
 ];
 
-export const NAV_TAB_TOGGLE_EVENT = "koodo-nav-tab-toggle";
+export const NAV_TAB_TOGGLE_EVENT = "kesach-nav-tab-toggle";
 export const toggleNavTab = (tab: string) => {
   window.dispatchEvent(
     new CustomEvent(NAV_TAB_TOGGLE_EVENT, {

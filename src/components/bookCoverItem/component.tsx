@@ -54,7 +54,6 @@ const BookCoverItem: React.FC<BookCoverProps> = (props) => {
     setIsHover,
     cover,
     isCoverExist,
-    isBookOffline,
     isDropTarget,
     handleJump,
     handleSelectIconClick,
@@ -265,12 +264,6 @@ const BookCoverItem: React.FC<BookCoverProps> = (props) => {
         </div>
 
         <p className="book-cover-item-title">
-          {!isBookOffline && (
-            <span
-              className="icon-cloud book-download-action"
-              style={{ fontWeight: "bold" }}
-            ></span>
-          )}
           {ConfigService.getReaderConfig("isUseOriginalName") === "yes"
             ? getFileNameWithoutExtension(props.book.path, props.book.name)
             : props.book.name}

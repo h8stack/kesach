@@ -34,7 +34,6 @@ export default defineConfig(({ command }) => ({
         "./src/router/index.tsx",
         "./src/pages/manager/index.tsx",
         "./src/pages/reader/index.tsx",
-        "./src/pages/login/index.tsx",
       ],
     },
   },

@@ -21,8 +21,16 @@ const isDev = require("electron-is-dev");
 const Store = require("electron-store");
 const log = require("electron-log/main");
 const os = require("os");
-const store = new Store();
 const fs = require("fs");
+const {
+  migrateUserData,
+  NEW_APP_NAME,
+} = require("./src/utils/main/user-data-migrate");
+// Migrate the legacy Koodo Reader data folder before electron-store
+// and app.getPath("userData") consumers resolve their paths.
+migrateUserData(app);
+app.setName(NEW_APP_NAME);
+const store = new Store();
 const fsExtra = require("fs-extra");
 const nodeCrypto = require("crypto");
 const yauzl = require("yauzl");
@@ -35,19 +43,9 @@ const {
 } = require("./src/utils/main/tar-index");
 const { runPowerShellScript } = require("./src/utils/main/powershell-util");
 const {
-  buildProxyUrl,
-  checkCloudUrl,
-  testProxyConnection,
-} = require("./src/utils/main/network-util");
-const {
   backupToPath,
   restoreFromPath,
 } = require("./src/utils/main/backup-util");
-const {
-  setDiscordActivity,
-  clearDiscordActivity,
-  destroyDiscordRPC,
-} = require("./src/utils/main/discord-rpc-util");
 const {
   resolveOcrLang,
   parseOcrImageInput,
@@ -153,11 +151,7 @@ let mainView;
 //multi tab
 // let mainViewList = []
 let readerWindowReadyToClose = false;
-let chatWindow;
 let dbConnection = {};
-let syncUtilCache = {};
-let pickerUtilCache = {};
-let downloadRequest = null;
 
 const RESIZE_THROTTLE_MS = 300;
 
@@ -252,7 +246,7 @@ if (process.platform != "darwin" && process.argv.length >= 2) {
   filePath = process.argv[1];
   // Check argv for a deep link URL (cold start)
   for (const arg of process.argv) {
-    if (arg.startsWith("koodo-reader://")) {
+    if (arg.startsWith("kesach://")) {
       pendingDeepLink = arg;
       break;
     }
@@ -344,7 +338,7 @@ if (!singleInstance) {
       mainWin.focus();
     }
     // Handle deep link passed via second-instance argv
-    const deepLink = argv.find((arg) => arg.startsWith("koodo-reader://"));
+    const deepLink = argv.find((arg) => arg.startsWith("kesach://"));
     if (deepLink) {
       if (deepLink === pendingDeepLink) {
         pendingDeepLink = null;
@@ -386,31 +380,6 @@ const getDBConnection = (dbName, storagePath, sqlStatement) => {
   }
   return dbConnection[dbName];
 };
-const getSyncUtil = async (config, isUseCache = true) => {
-  if (!isUseCache || !syncUtilCache[config.service]) {
-    const { SyncUtil } = await import("./src/assets/lib/kookit-extra.min.mjs");
-    syncUtilCache[config.service] = new SyncUtil(config.service, config);
-  }
-  return syncUtilCache[config.service];
-};
-const removeSyncUtil = (config) => {
-  if (syncUtilCache[config.service]) {
-    syncUtilCache[config.service].clearQueue();
-    delete syncUtilCache[config.service];
-  }
-};
-const getPickerUtil = async (config, isUseCache = true) => {
-  if (!isUseCache || !pickerUtilCache[config.service]) {
-    const { SyncUtil } = await import("./src/assets/lib/kookit-extra.min.mjs");
-    pickerUtilCache[config.service] = new SyncUtil(config.service, config);
-  }
-  return pickerUtilCache[config.service];
-};
-const removePickerUtil = (config) => {
-  if (pickerUtilCache[config.service]) {
-    pickerUtilCache[config.service] = null;
-  }
-};
 const applyNativeThemeSource = (appSkin) => {
   if (process.type !== "browser") {
     return false;
@@ -424,54 +393,6 @@ const applyNativeThemeSource = (appSkin) => {
   return getNativeDarkColorStatus();
 };
 applyNativeThemeSource(store.get("appSkin"));
-const applyProxyToSession = async () => {
-  const { session } = require("electron");
-  const http = require("http");
-  const https = require("https");
-  const config = store.get("proxyConfig");
-  const defaultSession = session.defaultSession;
-  const isEnabled =
-    config && config.type !== "none" && config.enabled !== false && config.host;
-  if (!isEnabled) {
-    // 未启用应用内代理时，跟随操作系统代理（与浏览器行为一致）。
-    // 此前强制 direct 会绕过系统代理（如 Clash/v2rayN 等），导致 Electron 端
-    // 直连 OCR 的 wasm/模型等境外 CDN 不可达（网页端走系统代理所以正常）。
-    await defaultSession.setProxy({ mode: "system" });
-    https.globalAgent = new https.Agent();
-    http.globalAgent = new http.Agent();
-    return;
-  }
-  const proxyUrl = buildProxyUrl(config);
-  let agent = null;
-  try {
-    if (config.type === "socks5") {
-      const { SocksProxyAgent } = require("socks-proxy-agent");
-      agent = new SocksProxyAgent(proxyUrl);
-    } else {
-      const { HttpsProxyAgent } = require("https-proxy-agent");
-      agent = new HttpsProxyAgent(proxyUrl);
-    }
-  } catch (error) {
-    agent = null;
-  }
-  const authentication = config.username
-    ? `${encodeURIComponent(config.username)}:${encodeURIComponent(config.password || "")}@`
-    : "";
-  if (config.type === "http") {
-    const proxyAddress = `${authentication}${config.host}:${config.port}`;
-    await defaultSession.setProxy({
-      proxyRules: `http=${proxyAddress};https=${proxyAddress}`,
-    });
-  } else if (config.type === "socks5") {
-    await defaultSession.setProxy({
-      proxyRules: `socks5://${config.host}:${config.port}`,
-    });
-  }
-  if (agent) {
-    https.globalAgent = agent;
-    http.globalAgent = agent;
-  }
-};
 // Simple encryption function
 const encrypt = (text, key) => {
   let result = "";
@@ -524,7 +445,7 @@ const createTray = () => {
   tray = new Tray(trayIcon);
   const contextMenu = Menu.buildFromTemplate([
     {
-      label: "Open Koodo Reader",
+      label: "Open KeSach",
       click: () => {
         if (mainWin) {
           mainWin.show();
@@ -540,7 +461,7 @@ const createTray = () => {
       },
     },
   ]);
-  tray.setToolTip("Koodo Reader");
+  tray.setToolTip("KeSach");
   tray.setContextMenu(contextMenu);
   tray.on("click", () => {
     if (mainWin) {
@@ -906,87 +827,6 @@ const createMainWin = () => {
       stream.on("end", () => resolve(hash.digest("hex")));
     });
   });
-  ipcMain.handle("cancel-download-app", (event, arg) => {
-    // Implement cancellation logic here
-    // Note: In this example, we are not keeping a reference to the request,
-    // so we cannot actually abort it. This is a placeholder for demonstration.
-    if (downloadRequest) {
-      downloadRequest.abort();
-      downloadRequest = null;
-    }
-    event.returnValue = "cancelled";
-  });
-  // Discord RPC handlers
-  ipcMain.handle("discord-rpc-update", async (event, config) => {
-    await setDiscordActivity(config);
-  });
-  ipcMain.handle("discord-rpc-clear", async (event) => {
-    await clearDiscordActivity();
-  });
-  ipcMain.handle("update-win-app", (event, config) => {
-    let fileName = `koodo-reader-installer.exe`;
-    let supportedArchs = ["x64", "ia32", "arm64"];
-    //get system arch
-    let arch = os.arch();
-    if (!supportedArchs.includes(arch)) {
-      return;
-    }
-
-    let url = `https://dl.koodoreader.com/v${config.version}/Koodo-Reader-${config.version}-${arch}.exe`;
-    const https = require("https");
-    const { spawn } = require("child_process");
-    const file = fs.createWriteStream(path.join(app.getPath("temp"), fileName));
-    downloadRequest = https.get(url, (res) => {
-      const totalSize = parseInt(res.headers["content-length"], 10);
-      let downloadedSize = 0;
-      res.on("data", (chunk) => {
-        downloadedSize += chunk.length;
-        const progress = ((downloadedSize / totalSize) * 100).toFixed(2);
-        const downloadedMB = (downloadedSize / 1024 / 1024).toFixed(2);
-        const totalMB = (totalSize / 1024 / 1024).toFixed(2);
-        mainWin.webContents.send("download-app-progress", {
-          progress,
-          downloadedMB,
-          totalMB,
-        });
-      });
-
-      res.pipe(file);
-      file.on("finish", () => {
-        console.info("\n下载完成！");
-        file.close();
-
-        let updateExePath = path.join(app.getPath("temp"), fileName);
-        if (!fs.existsSync(updateExePath)) {
-          console.error("更新包不存在:", updateExePath);
-          return;
-        }
-        // 验证文件可执行性
-        try {
-          fs.accessSync(updateExePath, fs.constants.X_OK);
-          console.info("更新包可执行性验证通过");
-        } catch (err) {
-          console.error("更新包不可执行:", err.message);
-          return;
-        }
-        try {
-          // 先退出应用，再启动安装程序，避免文件锁定导致覆盖安装失败
-          app.once("will-quit", () => {
-            const child = spawn(updateExePath, [], {
-              stdio: "ignore",
-              detached: true,
-              shell: true,
-              windowsHide: false,
-            });
-            child.unref();
-          });
-          app.quit();
-        } catch (err) {
-          console.error(`spawn 执行异常: ${err.message}`);
-        }
-      });
-    });
-  });
   ipcMain.handle("open-book", (event, config) => {
     let { url, isMergeWord, isAutoFullscreen, isAutoMaximize, isPreventSleep } =
       config;
@@ -1103,7 +943,6 @@ const createMainWin = () => {
       if (mainWin && !mainWin.isDestroyed()) {
         mainWin.webContents.send("reading-finished", {});
       }
-      clearDiscordActivity();
     });
     // Renderer finished flushing reading-time data — proceed with actual close
     ipcMain.once("reader-close-ready", () => {
@@ -1166,84 +1005,6 @@ const createMainWin = () => {
 
     return voices;
   });
-  ipcMain.handle("cloud-upload", async (event, config) => {
-    let syncUtil = await getSyncUtil(config, config.isUseCache);
-    let result = await syncUtil.uploadFile(
-      config.fileName,
-      config.fileName,
-      config.type
-    );
-    return result;
-  });
-
-  ipcMain.handle("cloud-download", async (event, config) => {
-    let syncUtil = await getSyncUtil(config);
-    let result = await syncUtil.downloadFile(
-      config.fileName,
-      (config.isTemp ? "temp-" : "") + config.fileName,
-      config.type
-    );
-    return result;
-  });
-  ipcMain.handle("cloud-progress", async (event, config) => {
-    let syncUtil = await getSyncUtil(config);
-    let result = syncUtil.getDownloadedSize();
-    return result;
-  });
-  ipcMain.handle("picker-download", async (event, config) => {
-    let pickerUtil = await getPickerUtil(config);
-    let result = await pickerUtil.remote.downloadFile(
-      config.sourcePath,
-      config.destPath
-    );
-    return result;
-  });
-  ipcMain.handle("picker-progress", async (event, config) => {
-    let pickerUtil = await getPickerUtil(config);
-    let result = await pickerUtil.getDownloadedSize();
-    return result;
-  });
-  ipcMain.handle("cloud-reset", async (event, config) => {
-    let syncUtil = await getSyncUtil(config);
-    let result = syncUtil.resetCounters();
-    return result;
-  });
-  ipcMain.handle("cloud-stats", async (event, config) => {
-    let syncUtil = await getSyncUtil(config);
-    let result = syncUtil.getStats();
-    return result;
-  });
-  ipcMain.handle("cloud-delete", async (event, config) => {
-    try {
-      let syncUtil = await getSyncUtil(config, config.isUseCache);
-      let result = await syncUtil.deleteFile(config.fileName, config.type);
-      return result;
-    } catch (error) {
-      console.error("Error deleting file:", error);
-    }
-    return false;
-  });
-
-  ipcMain.handle("cloud-list", async (event, config) => {
-    let syncUtil = await getSyncUtil(config);
-    let result = await syncUtil.listFiles(config.type);
-    return result;
-  });
-  ipcMain.handle("picker-list", async (event, config) => {
-    let pickerUtil = await getPickerUtil(config);
-    let result = await pickerUtil.listFileInfos(config.currentPath);
-    return result;
-  });
-  ipcMain.handle("cloud-exist", async (event, config) => {
-    let syncUtil = await getSyncUtil(config);
-    let result = await syncUtil.isExist(config.fileName, config.type);
-    return result;
-  });
-  ipcMain.handle("cloud-close", async (event, config) => {
-    removeSyncUtil(config);
-    return "pong";
-  });
-
   ipcMain.handle("clear-tts", async (event, config) => {
     if (!fs.existsSync(getTTSCacheDirPath())) {
       await fsExtra.mkdir(getTTSCacheDirPath());
@@ -1279,58 +1040,6 @@ const createMainWin = () => {
         await fsExtra.remove(cacheDir);
       }
     }
-  });
-  // 官方 AI 语音本地缓存查询：命中返回 file:// 地址，未命中返回空字符串
-  ipcMain.handle("get-cached-tts", async (event, config) => {
-    const { text, speed, voiceIdentifier } = config || {};
-    if (
-      typeof text !== "string" ||
-      !text ||
-      typeof speed !== "number" ||
-      !Number.isFinite(speed) ||
-      typeof voiceIdentifier !== "string" ||
-      !voiceIdentifier
-    ) {
-      throw new Error("Invalid TTS cache request");
-    }
-    const key = ttsCacheUtil.getTTSAudioKey({
-      text,
-      speed,
-      voiceIdentifier,
-    });
-    const audioPath = ttsCacheUtil.findCachedTTSAudio(dirPath, key);
-    if (audioPath && fs.existsSync(audioPath)) {
-      return {
-        key,
-        audioPath: pathToFileURL(audioPath).toString(),
-      };
-    }
-    if (audioPath) {
-      ttsCacheUtil.resetTTSAudioIndex(dirPath);
-    }
-    return { key, audioPath: "" };
-  });
-  // 官方 AI 语音音频落盘：key 为内容哈希，跨会话复用
-  ipcMain.handle("save-tts-audio", async (event, config) => {
-    const { key, base64 } = config || {};
-    const rawBase64 =
-      typeof base64 === "string" ? base64 : base64 && base64.audio_base64;
-    if (
-      !ttsCacheUtil.isTTSAudioKey(key) ||
-      typeof rawBase64 !== "string" ||
-      !rawBase64
-    ) {
-      throw new Error("Invalid TTS audio cache request");
-    }
-    const base64Data = rawBase64.includes("base64,")
-      ? rawBase64.split("base64,")[1]
-      : rawBase64;
-    const audioPath = ttsCacheUtil.saveTTSAudio(
-      dirPath,
-      key,
-      Buffer.from(base64Data, "base64")
-    );
-    return pathToFileURL(audioPath).toString();
   });
   ipcMain.handle("select-path", async (event) => {
     var path = await dialog.showOpenDialog({
@@ -1375,58 +1084,9 @@ const createMainWin = () => {
       }
     }
   });
-  ipcMain.handle("check-cloud-url", async (event, config) => {
-    const { url } = config;
-    return checkCloudUrl(url);
-  });
-  ipcMain.handle("get-proxy-config", async () => {
-    const config = store.get("proxyConfig") || {
-      enabled: false,
-      type: "none",
-      host: "",
-      port: 0,
-      username: "",
-      password: "",
-    };
-    return config;
-  });
-  ipcMain.handle("set-proxy-config", async (event, config) => {
-    const { enabled, type, host, port, username, password } = config || {};
-    const validTypes = ["none", "http", "socks5"];
-    if (!validTypes.includes(type)) {
-      return { ok: false, reason: "invalid_input" };
-    }
-    if (type !== "none") {
-      if (!host || typeof host !== "string" || host.includes("://")) {
-        return { ok: false, reason: "invalid_input" };
-      }
-      const portNumber = parseInt(port);
-      if (isNaN(portNumber) || portNumber < 1 || portNumber > 65535) {
-        return { ok: false, reason: "invalid_input" };
-      }
-    }
-    const finalEnabled = type === "none" ? false : !!enabled;
-    const configToStore = {
-      enabled: finalEnabled,
-      type,
-      host: type === "none" ? "" : host,
-      port: type === "none" ? 0 : parseInt(port),
-      username: type === "none" ? "" : username || "",
-      password: type === "none" ? "" : password || "",
-    };
-    store.set("proxyConfig", configToStore);
-    await applyProxyToSession();
-    return { ok: true };
-  });
-  ipcMain.handle("test-proxy-connection", async (event, config) => {
-    return testProxyConnection(config);
-  });
   ipcMain.handle("get-mac", async (event, config) => {
     const { machineIdSync } = require("node-machine-id");
     return machineIdSync();
-  });
-  ipcMain.handle("get-device-name", async () => {
-    return os.hostname() || "";
   });
   ipcMain.handle("get-biometric-capability", async () => {
     return await getBiometricCapability();
@@ -2016,40 +1676,6 @@ const createMainWin = () => {
     }
   });
 
-  ipcMain.handle("new-chat", (event, config) => {
-    if (!chatWindow && mainWin) {
-      let bounds = mainWin.getBounds();
-      chatWindow = new BrowserWindow({
-        ...options,
-        width: 450,
-        height: bounds.height,
-        x: bounds.x + (bounds.width - 450),
-        y: bounds.y,
-        frame: true,
-        hasShadow: true,
-        transparent: false,
-        webPreferences: {
-          ...options.webPreferences,
-          nodeIntegration: false,
-          contextIsolation: true,
-          preload: path.join(__dirname, "chat-preload.js"),
-        },
-      });
-      chatWindow.loadURL(config.url);
-      chatWindow.on("close", (event) => {
-        chatWindow && chatWindow.destroy();
-        chatWindow = null;
-      });
-    } else if (chatWindow && !chatWindow.isDestroyed()) {
-      chatWindow.show();
-      chatWindow.focus();
-    }
-  });
-  ipcMain.on("chat-message", (event, msg) => {
-    if (mainWin && !mainWin.isDestroyed()) {
-      mainWin.webContents.send("chat-message", msg);
-    }
-  });
   ipcMain.handle("clear-all-data", async (event, config) => {
     try {
       if (fs.existsSync(path.join(dirPath, "tts"))) {
@@ -2094,8 +1720,7 @@ const createMainWin = () => {
           mainWin.webContents.send("reading-finished", {});
           mainWin.contentView.removeChildView(mainView);
         }
-        clearDiscordActivity();
-        resolve(undefined);
+          resolve(undefined);
       };
 
       // Ask the tab renderer to flush reading-time data first, then close
@@ -2252,8 +1877,7 @@ const createMainWin = () => {
         if (mainWin && !mainWin.isDestroyed()) {
           mainWin.webContents.send("reading-finished", {});
         }
-        clearDiscordActivity();
-      });
+        });
       // Renderer finished flushing reading-time data — proceed with actual close
       ipcMain.once("reader-close-ready", () => {
         if (readerWindow && !readerWindow.isDestroyed()) {
@@ -2392,13 +2016,11 @@ const applyCorsToRendererRequests = () => {
 
 app.on("ready", async () => {
   applyCorsToRendererRequests();
-  await applyProxyToSession();
   applyNativeThemeSource(store.get("appSkin"));
   createMainWin();
 });
 app.on("before-quit", () => {
   isQuitting = true;
-  destroyDiscordRPC();
 });
 app.on("window-all-closed", () => {
   app.quit();
@@ -2407,7 +2029,7 @@ app.on("open-file", (e, pathToFile) => {
   filePath = pathToFile;
 });
 // Register protocol handler
-app.setAsDefaultProtocolClient("koodo-reader");
+app.setAsDefaultProtocolClient("kesach");
 const serializeArg = (arg) => {
   if (arg === null) return "null";
   if (arg === undefined) return "undefined";
@@ -2451,7 +2073,7 @@ var lastDeepLinkAt = 0;
 const handleCallback = (url) => {
   try {
     // 检查 URL 是否有效
-    if (!url.startsWith("koodo-reader://")) {
+    if (!url.startsWith("kesach://")) {
       console.error("Invalid URL format:", url);
       return;
     }
@@ -2468,21 +2090,8 @@ const handleCallback = (url) => {
 
     // 解析 URL
     const parsedUrl = new URL(url);
-    const code = parsedUrl.searchParams.get("code");
-    const state = parsedUrl.searchParams.get("state");
-    const pickerData = parsedUrl.searchParams.get("pickerData");
-
     const bookKey = parsedUrl.searchParams.get("bookKey");
     const noteKey = parsedUrl.searchParams.get("noteKey");
-    const importUrl = parsedUrl.searchParams.get("importUrl");
-
-    if (code && mainWin) {
-      mainWin.webContents.send("oauth-callback", { code, state });
-    }
-    if (pickerData && mainWin) {
-      let config = JSON.parse(decodeURIComponent(pickerData));
-      mainWin.webContents.send("picker-finished", config);
-    }
     if (bookKey && mainWin) {
       if (mainWin.isMinimized()) mainWin.restore();
       mainWin.show();
@@ -2494,13 +2103,6 @@ const handleCallback = (url) => {
       mainWin.show();
       mainWin.focus();
       mainWin.webContents.send("open-note-from-link", { noteKey });
-    }
-    if (importUrl && mainWin) {
-      const decodedUrl = decodeURIComponent(importUrl);
-      if (mainWin.isMinimized()) mainWin.restore();
-      mainWin.show();
-      mainWin.focus();
-      mainWin.webContents.send("import-url-from-link", { url: decodedUrl });
     }
   } catch (error) {
     console.error("Error handling callback URL:", error);

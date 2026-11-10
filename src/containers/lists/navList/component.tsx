@@ -11,6 +11,7 @@ import {
 } from "../../../assets/lib/kookit-extra-browser.min";
 import DatabaseService from "../../../utils/storage/databaseService";
 import ConfigUtil from "../../../utils/file/configUtil";
+import { SearchTextCache, normalizeSearch } from "../../../utils/file/searchUtil";
 import Book from "../../../models/Book";
 import Bookmark from "../../../models/Bookmark";
 import Note from "../../../models/Note";
@@ -91,32 +92,38 @@ const NavList = (props: NavListProps) => {
   const prevPropsRef = useRef<NavPrevProps | null>(null);
   const stateRef = useLatest(state);
 
+  const searchCacheRef = useRef(new SearchTextCache());
+
+  useEffect(() => {
+    searchCacheRef.current.clear();
+  }, [bookmarks, notes, highlights]);
+
   const handleSearch = async (keyword: string) => {
-    const trimmedKeyword = keyword.trim();
-    if (!trimmedKeyword) {
+    const normalizedQuery = normalizeSearch(keyword.trim());
+    if (!normalizedQuery) {
       setState((prev) => ({ ...prev, searchResults: [] }));
       return;
     }
-    const currentTab = props.currentTab;
-    let results: any[] = [];
-    if (currentTab === "bookmarks") {
-      results = await ConfigUtil.searchBookmarksByKeyword(
-        trimmedKeyword,
-        currentBook.key
-      );
-    } else if (currentTab === "notes") {
-      results = await ConfigUtil.searchNotesByKeyword(
-        trimmedKeyword,
-        currentBook.key,
-        "note"
-      );
-    } else {
-      results = await ConfigUtil.searchNotesByKeyword(
-        trimmedKeyword,
-        currentBook.key,
-        "highlight"
-      );
-    }
+    const fallbackSource: any[] =
+      props.currentTab === "bookmarks"
+        ? bookmarks.filter((item: any) => item.bookKey === currentBook.key)
+        : props.currentTab === "notes"
+          ? notes.filter((item: any) => item.bookKey === currentBook.key)
+          : highlights.filter((item: any) => item.bookKey === currentBook.key);
+    const source =
+      stateRef.current.currentData.length > 0
+        ? stateRef.current.currentData
+        : fallbackSource;
+    const cache = searchCacheRef.current;
+    const results = source.filter((item: any) => {
+      const haystack = cache.get(item.key, [
+        item.text,
+        item.notes,
+        item.chapter,
+        item.content,
+      ]);
+      return haystack.includes(normalizedQuery);
+    });
     setState((prev) => ({ ...prev, searchResults: results || [] }));
   };
 

@@ -1,4 +1,4 @@
-import { getStorageLocation, prepareThirdConfig } from "../common";
+import { getStorageLocation } from "../common";
 import CoverUtil from "./coverUtil";
 import {
   CommonTool,
@@ -10,7 +10,6 @@ import Book from "../../models/Book";
 import Note from "../../models/Note";
 import Bookmark from "../../models/Bookmark";
 import DictHistory from "../../models/DictHistory";
-import { decryptToken } from "../request/thirdparty";
 import toast from "react-hot-toast";
 import { Buffer } from "buffer";
 import i18n from "../../i18n";
@@ -21,8 +20,6 @@ declare var window: any;
 
 // File System Access API type declarations
 
-let configCache: any = {};
-let cloudConfigLocks: { [service: string]: Promise<any> } = {};
 export const changePath = async (newPath: string) => {
   if (isFolderContainsFile(newPath)) {
     toast.error(i18n.t("Please select an empty folder"));
@@ -51,7 +48,7 @@ export const changePath = async (newPath: string) => {
   }
 };
 export const changeLibrary = async (newPath: string) => {
-  if (!isKoodoLibrary(newPath)) {
+  if (!isKeSachLibrary(newPath)) {
     toast.error(i18n.t("Please select a valid library"));
     return false;
   }
@@ -73,7 +70,7 @@ const isFolderContainsFile = (folderPath: string) => {
   const files = fs.readdirSync(folderPath);
   return files.length > 0;
 };
-const isKoodoLibrary = (folderPath: string) => {
+const isKeSachLibrary = (folderPath: string) => {
   const fs = window.electronAPI.fs;
   if (!fs.existsSync(folderPath)) {
     return false;
@@ -81,19 +78,6 @@ const isKoodoLibrary = (folderPath: string) => {
   const files = fs.readdirSync(folderPath);
   return files.includes("config");
 };
-export function getLoginParamsFromUrl() {
-  const url = document.location.href;
-  const params = {};
-  const queryString = url.split("?")[1] || "";
-  const regex = /([^&;=]+)=?([^&;]*)/g;
-  let match;
-
-  while ((match = regex.exec(queryString))) {
-    params[decodeURIComponent(match[1])] = decodeURIComponent(match[2]);
-  }
-
-  return params;
-}
 export const upgradeStorage = async (
   handleFinish: () => void = () => {}
 ): Promise<Boolean> => {
@@ -279,33 +263,4 @@ export const upgradeConfig = async (): Promise<Boolean> => {
     console.error(error);
     return false;
   }
-};
-export const getCloudConfig = (service: string): Promise<any> => {
-  const prev = cloudConfigLocks[service] ?? Promise.resolve();
-  const next = prev.then(async () => {
-    let config = await getCloudToken(service);
-    if (!config) {
-      return {};
-    }
-    return await prepareThirdConfig(service, config);
-  });
-  // 链上错误处理，避免一次失败阻断后续调用
-  cloudConfigLocks[service] = next.catch(() => {});
-  return next;
-};
-export const getCloudToken = async (service: string) => {
-  if (configCache[service]) {
-    return configCache[service];
-  } else {
-    let result = await decryptToken(service);
-    if (result.code !== 200) {
-      return null;
-    }
-    let config = JSON.parse(result.data.token);
-    configCache[service] = config;
-    return config;
-  }
-};
-export const removeCloudConfig = (service: string) => {
-  delete configCache[service];
 };

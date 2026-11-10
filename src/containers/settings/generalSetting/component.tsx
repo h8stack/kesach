@@ -26,11 +26,8 @@ export interface SettingInfoState {
   isAutoLaunch: boolean;
   isMinimizeToTray: boolean;
   isOpenInMain: boolean;
-  isDisableUpdate: boolean;
   isExportOriginalName: boolean;
-  isDisableAI: boolean;
   isUseOriginalName: boolean;
-  isAIAnalyzeTitle: boolean;
   isPrecacheBook: boolean;
   isUseBuiltIn: boolean;
   isDeleteOriginal: boolean;
@@ -61,15 +58,10 @@ const GeneralSetting = () => {
     isMinimizeToTray:
       ConfigService.getReaderConfig("isMinimizeToTray") === "yes",
     isOpenInMain: ConfigService.getReaderConfig("isOpenInMain") === "yes",
-    isDisableAI: ConfigService.getReaderConfig("isDisableAI") === "yes",
     isUseOriginalName:
       ConfigService.getReaderConfig("isUseOriginalName") === "yes",
-    isAIAnalyzeTitle:
-      ConfigService.getReaderConfig("isAIAnalyzeTitle") === "yes",
     isExportOriginalName:
       ConfigService.getReaderConfig("isExportOriginalName") === "yes",
-    isDisableUpdate:
-      ConfigService.getReaderConfig("isDisableUpdate") === "yes",
     isPrecacheBook: ConfigService.getReaderConfig("isPrecacheBook") === "yes",
     isUseBuiltIn: ConfigService.getReaderConfig("isUseBuiltIn") === "yes",
     isDeleteOriginal:
@@ -205,7 +197,7 @@ const GeneralSetting = () => {
           <select
             name=""
             className="lang-setting-dropdown"
-            value={ConfigService.getReaderConfig("lang") || "en"}
+            value={ConfigService.getReaderConfig("lang") || "vi"}
             onChange={(event) => {
               changeLanguage(event.target.value);
             }}

@@ -3,8 +3,6 @@ import "./settingDialog.css";
 import { useAppStore } from "../../../store/useAppStore";
 import { Trans } from "react-i18next";
 import GeneralSetting from "../../../containers/settings/generalSetting";
-import SyncSetting from "../../../containers/settings/syncSetting";
-import AccountSetting from "../../../containers/settings/accountSetting";
 import PluginSetting from "../../../containers/settings/pluginSetting";
 import ReadingSetting from "../../../containers/settings/readingSetting";
 import AppearanceSetting from "../../../containers/settings/appearanceSetting";
@@ -23,19 +21,11 @@ const SettingDialog = () => {
   const settingMode = useAppStore((s) => s.manager.settingMode);
   const handleSetting = useAppStore((s) => s.handleSetting);
   const handleFetchPlugins = useAppStore((s) => s.handleFetchPlugins);
-  const handleFetchDataSourceList = useAppStore(
-    (s) => s.handleFetchDataSourceList
-  );
-  const handleFetchDefaultSyncOption = useAppStore(
-    (s) => s.handleFetchDefaultSyncOption
-  );
   const handleSettingMode = useAppStore((s) => s.handleSettingMode);
   const contentRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     handleFetchPlugins();
-    handleFetchDataSourceList();
-    handleFetchDefaultSyncOption();
   }, []);
 
   useEffect(() => {
@@ -77,10 +67,6 @@ const SettingDialog = () => {
         return "Appearance";
       case "plugins":
         return "Plugins";
-      case "sync":
-        return "Sync and backup";
-      case "account":
-        return "Account";
       case "about":
         return "About";
       case "ai":
@@ -112,7 +98,6 @@ const SettingDialog = () => {
 
           {/* First group */}
           <div className="setting-dialog-sidebar-group">
-            {renderSidebarItem("account", "icon-user", "Account", "18px")}
             {renderSidebarItem("general", "icon-setting", "General", "")}
             {renderSidebarItem("data", "icon-archive", "Data", "15px")}
             {renderSidebarItem(
@@ -134,7 +119,6 @@ const SettingDialog = () => {
               "20px"
             )}
 
-            {renderSidebarItem("sync", "icon-sync", "Sync and backup", "")}
             {renderSidebarItem(
               "more",
               "icon-more",
@@ -214,10 +198,6 @@ const SettingDialog = () => {
               <ShortcutSetting />
             ) : settingMode === "appearance" ? (
               <AppearanceSetting />
-            ) : settingMode === "sync" ? (
-              <SyncSetting />
-            ) : settingMode === "account" ? (
-              <AccountSetting />
             ) : settingMode === "data" ? (
               <DataSetting />
             ) : settingMode === "about" ? (

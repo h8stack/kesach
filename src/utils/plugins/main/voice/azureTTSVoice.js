@@ -35,7 +35,7 @@ const getTTSAudio = async (text, speed, config) => {
           "Ocp-Apim-Subscription-Key": apiKey,
           "Content-Type": "application/ssml+xml",
           "X-Microsoft-OutputFormat": outputFormat,
-          "User-Agent": "koodo-reader",
+          "User-Agent": "KeSach",
         },
         responseType: "arraybuffer",
       })

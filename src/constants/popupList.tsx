@@ -56,7 +56,7 @@ export const popupList: PopupOptionItem[] = [
   {
     key: "search-book",
     name: "search-book",
-    title: "Search in the Book",
+    title: "Search in the Book/Document",
     icon: "search-book",
     defaultEnabled: true,
   },

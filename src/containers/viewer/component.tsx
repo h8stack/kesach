@@ -27,7 +27,6 @@ import {
   getPageWidth,
   getParserRegex,
   getPdfPassword,
-  getServerRegion,
   getTarBuffer,
   getTarEntries,
   getTextRules,
@@ -48,13 +47,11 @@ import {
 import * as Kookit from "../../assets/lib/kookit.min";
 import PopupRefer from "../../components/popups/popupRefer";
 import DatabaseService from "../../utils/storage/databaseService";
-import { getOcrResult, getOcrResultV2 } from "../../utils/request/reader";
 import { BookHelper } from "../../assets/lib/kookit.min";
 import { parseWithSystemOCR } from "../../utils/request/common";
 import { isElectron } from "react-device-detect";
 import axios from "axios";
 import { getBuiltinOcr } from "../../utils/plugins/rendererRegistry";
-import { getBuiltinEngineOcrWorker } from "../../utils/reader/builtinOcrUtil";
 import { resolveStoredPlugin } from "../../utils/plugins/records";
 import type { PluginConfig } from "../../utils/plugins/types";
 import { useAppStore } from "../../store/useAppStore";
@@ -98,7 +95,6 @@ const Viewer = (props: ViewerProps) => {
   const isSettingLocked = useAppStore((s) => s.reader.isSettingLocked);
   const isDockedRight = useAppStore((s) => s.reader.isDockedRight);
   const isOpenMenu = useAppStore((s) => s.viewArea.isOpenMenu);
-  const isAuthed = useAppStore((s) => s.manager.isAuthed);
   const readerMode = useAppStore((s) => s.reader.readerMode);
   const menuMode = useAppStore((s) => s.viewArea.menuMode);
   const scale = useAppStore((s) => s.reader.scale);
@@ -139,7 +135,6 @@ const Viewer = (props: ViewerProps) => {
     isSettingLocked,
     isDockedRight,
     isOpenMenu,
-    isAuthed,
     readerMode,
     menuMode,
     scale,
@@ -337,26 +332,10 @@ const Viewer = (props: ViewerProps) => {
     // 缓存 key 需要区分不同 OCR 插件，而渲染引擎统一用 "plugin-ocr"，两者分开维护
     let ocrCacheEngine = rawOcrEngine;
     let ocrLang = getDefaultOcrLang(rawOcrEngine, propsRef.current.currentBook);
-    const serverRegion =
-      getServerRegion() === "china" && propsRef.current.isAuthed
-        ? "china"
-        : "global";
     let externalWorker: {
       recognize: (input: string) => Promise<unknown>;
     } = {
-      recognize:
-        rawOcrEngine === "system-ocr"
-          ? parseWithSystemOCR
-          : rawOcrEngine === "tesseract" || rawOcrEngine === "paddle"
-            ? getBuiltinEngineOcrWorker(
-                rawOcrEngine,
-                ocrLang,
-                serverRegion,
-                isElectron
-              ).recognize
-            : ConfigService.getReaderConfig(ocrLangKey) === "accurate"
-              ? getOcrResultV2
-              : getOcrResult,
+      recognize: parseWithSystemOCR,
     };
 
     const builtinOcr = getBuiltinOcr(rawOcrEngine);
@@ -376,23 +355,11 @@ const Viewer = (props: ViewerProps) => {
         };
         ocrEngine = "plugin-ocr";
       } else {
-        ocrEngine = isScannedBook ? "paddle" : "system-ocr";
+        ocrEngine = "system-ocr";
         ocrCacheEngine = ocrEngine;
-        ocrLang = ocrEngine === "paddle" ? "standard_v5_mobile" : "auto";
+        ocrLang = "auto";
         externalWorker = {
-          recognize:
-            ocrEngine === "system-ocr"
-              ? parseWithSystemOCR
-              : ocrEngine === "tesseract" || ocrEngine === "paddle"
-                ? getBuiltinEngineOcrWorker(
-                    ocrEngine,
-                    ocrLang,
-                    serverRegion,
-                    isElectron
-                  ).recognize
-                : ConfigService.getReaderConfig(ocrLangKey) === "accurate"
-                  ? getOcrResultV2
-                  : getOcrResult,
+          recognize: parseWithSystemOCR,
         };
       }
     }
@@ -426,12 +393,6 @@ const Viewer = (props: ViewerProps) => {
           propsRef.current.currentBook.format,
           propsRef.current.currentBook.key
         ),
-        fullTranslationMode:
-          ConfigService.getAllListConfig("fullTranslationBooks").includes(
-            propsRef.current.currentBook.key
-          ) && propsRef.current.isAuthed
-            ? ConfigService.getReaderConfig("fullTranslationMode")
-            : "no",
         textOrientation: ConfigService.getReaderConfig("textOrientation"),
         isDarkMode:
           ConfigService.getReaderConfig("backgroundColor") ===
@@ -460,8 +421,6 @@ const Viewer = (props: ViewerProps) => {
             "0.6"
         ),
         pageGap: ConfigService.getReaderConfig("pageGap"),
-        isEnableKoReaderSync:
-          ConfigService.getReaderConfig("isEnableKoReaderSync") === "yes",
         password: getPdfPassword(propsRef.current.currentBook),
         pdfCrop,
         scale: parseFloat(propsRef.current.scale),
@@ -473,7 +432,6 @@ const Viewer = (props: ViewerProps) => {
         ocrLang,
         externalWorker,
         ocrEngine,
-        serverRegion,
         paraSpacingValue:
           ConfigService.getReaderConfig("paraSpacingValue") || "1.5",
         titleSizeValue:
@@ -583,7 +541,7 @@ const Viewer = (props: ViewerProps) => {
       collectionUtil.getRecentBookKey(propsRef.current.currentBook.key),
       "recentBooks"
     );
-    document.title = name + " - Koodo Reader";
+    document.title = name + " - KeSach";
   };
 
   const handleRest = async (rendition: any) => {
@@ -631,28 +589,21 @@ const Viewer = (props: ViewerProps) => {
       {}
     );
     if (chapterDocs.length > 0) {
-      if (
-        ConfigService.getReaderConfig("isEnableKoReaderSync") === "yes" &&
-        bookLocation.xpath
-      ) {
-        await rendition.goToXpath(bookLocation.xpath);
-      } else {
-        await rendition.goToPosition(
-          JSON.stringify({
-            text: bookLocation.text || "",
-            chapterTitle: bookLocation.chapterTitle || "",
-            page: bookLocation.page || "",
-            chapterDocIndex: bookLocation.chapterDocIndex || 0,
-            chapterHref: bookLocation.chapterHref || "",
-            count: bookLocation.hasOwnProperty("cfi")
-              ? "ignore"
-              : bookLocation.count || 0,
-            percentage: bookLocation.percentage,
-            cfi: bookLocation.cfi,
-            isFirst: true,
-          })
-        );
-      }
+      await rendition.goToPosition(
+        JSON.stringify({
+          text: bookLocation.text || "",
+          chapterTitle: bookLocation.chapterTitle || "",
+          page: bookLocation.page || "",
+          chapterDocIndex: bookLocation.chapterDocIndex || 0,
+          chapterHref: bookLocation.chapterHref || "",
+          count: bookLocation.hasOwnProperty("cfi")
+            ? "ignore"
+            : bookLocation.count || 0,
+          percentage: bookLocation.percentage,
+          cfi: bookLocation.cfi,
+          isFirst: true,
+        })
+      );
     }
     rendition.on("rendered", async () => {
       handleLocation();

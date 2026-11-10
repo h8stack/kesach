@@ -11,13 +11,10 @@ import DOMPurify from "dompurify";
 import { Trans } from "react-i18next";
 import {
   handleContextMenu,
-  REPORT_REASONS,
-  vexSelectAsync,
 } from "../../../utils/common";
 import toast from "react-hot-toast";
 import { saveAs } from "file-saver";
-import { getAnswerStream } from "../../../utils/request/reader";
-import { chatStream, llmReport } from "../../../utils/request/common";
+import { chatStream } from "../../../utils/request/common";
 import { marked } from "marked";
 import { sampleQuestion } from "../../../constants/settingList";
 import { useAppStore } from "../../../store/useAppStore";
@@ -57,8 +54,6 @@ const PopupAssist = (props: PopupAssistProps) => {
   const quoteText = useAppStore((s) => s.reader.quoteText);
   const htmlBook = useAppStore((s) => s.reader.htmlBook);
   const plugins = useAppStore((s) => s.manager.plugins);
-  const isAuthed = useAppStore((s) => s.manager.isAuthed);
-  const userInfo = useAppStore((s) => s.manager.userInfo);
   const handleOpenMenu = useAppStore((s) => s.handleOpenMenu);
   const handleMenuMode = useAppStore((s) => s.handleMenuMode);
   const handleSetting = useAppStore((s) => s.handleSetting);
@@ -214,15 +209,6 @@ const PopupAssist = (props: PopupAssistProps) => {
           aiService: pluginList[0].key,
         });
         ConfigService.setReaderConfig("aiService", pluginList[0].key);
-      } else if (isAuthed) {
-        mergeState({
-          aiService: "official-ai-assistant-plugin",
-          isAddNew: false,
-        });
-        ConfigService.setReaderConfig(
-          "aiService",
-          "official-ai-assistant-plugin"
-        );
       } else {
         mergeState({
           isAddNew: true,
@@ -331,8 +317,7 @@ const PopupAssist = (props: PopupAssistProps) => {
       (!ConfigService.getReaderConfig("aiService") ||
         plugins.findIndex(
           (item) => item.key === ConfigService.getReaderConfig("aiService")
-        ) === -1) &&
-      !isAuthed
+        ) === -1)
     ) {
       mergeState({ isAddNew: true });
     }
@@ -423,75 +408,6 @@ const PopupAssist = (props: PopupAssistProps) => {
           }));
         }
         runAfterUpdate(scrollToBottomIfNeeded);
-      } else if (
-        ConfigService.getReaderConfig("aiService") &&
-        ConfigService.getReaderConfig("aiService") !==
-          "official-ai-assistant-plugin"
-      ) {
-      } else if (isAuthed) {
-        let plugin = plugins.find(
-          (item) => item.key === "official-ai-assistant-plugin"
-        );
-        if (!plugin) {
-          return;
-        }
-        answerTextAccumulator.current = "";
-        startUpdateInterval();
-        let res = await getAnswerStream(
-          text,
-          stateRef.current.question,
-          stateRef.current.mode === "ask"
-            ? stateRef.current.askHistory
-            : stateRef.current.chatHistory,
-          stateRef.current.mode,
-          (result) => {
-            if (result && result.text) {
-              if (!answerTextAccumulator.current) {
-                mergeState({ isWaiting: false });
-              }
-              answerTextAccumulator.current += result.text;
-            }
-          }
-        );
-        const isAnswerDone = !!(res.data && res.done);
-        stopUpdateInterval(
-          answerTextAccumulator.current,
-          isAnswerDone ? undefined : scrollToBottomIfNeeded
-        );
-        const finalAnswer = answerTextAccumulator.current;
-        answerTextAccumulator.current = "";
-        if (isAnswerDone) {
-          if (stateRef.current.mode === "ask") {
-            setState((prev) => ({
-              ...prev,
-              askHistory: [
-                ...prev.askHistory,
-                {
-                  role: "assistant",
-                  content: finalAnswer,
-                },
-              ],
-              answer: "",
-              question: "",
-              isWaiting: false,
-            }));
-          } else {
-            setState((prev) => ({
-              ...prev,
-              chatHistory: [
-                ...prev.chatHistory,
-                {
-                  role: "assistant",
-                  content: finalAnswer,
-                },
-              ],
-              answer: "",
-              question: "",
-              isWaiting: false,
-            }));
-          }
-          runAfterUpdate(scrollToBottomIfNeeded);
-        }
       }
     } catch (error) {
       toast.error(
@@ -506,12 +422,6 @@ const PopupAssist = (props: PopupAssistProps) => {
     }
   };
   const handleChangeAiService = (aiService: string) => {
-    if (aiService === "official-ai-assistant-plugin" && !isAuthed) {
-      toast(t("Please upgrade to Pro to use this feature"));
-      handleSetting(true);
-      handleSettingMode("account");
-      return;
-    }
     let plugin = plugins.find((item) => item.key === aiService);
     if (!plugin) {
       return;
@@ -530,39 +440,6 @@ const PopupAssist = (props: PopupAssistProps) => {
     navigator.clipboard.writeText(content || "").then(() => {
       toast.success(t("Copied"));
     });
-  };
-  const handleReportAnswer = async (content: string, index: number) => {
-    const history =
-      stateRef.current.mode === "ask"
-        ? stateRef.current.askHistory
-        : stateRef.current.chatHistory;
-    const userMessage = history
-      .slice(0, index)
-      .reverse()
-      .find((item) => item.role === "user");
-    const reason = await vexSelectAsync(
-      "Report reason",
-      REPORT_REASONS.map((item) => ({ value: item, label: item }))
-    );
-    if (!reason) {
-      return;
-    }
-    toast.loading(t("Please wait"), { id: "report-feedback" });
-    try {
-      await llmReport({
-        answer: content,
-        question: userMessage?.content || "",
-        reason: t(reason),
-        user_id: (userInfo?.time_created || "") + "" || "anonymous",
-      });
-      toast.success(t("Thank you for your feedback"), {
-        id: "report-feedback",
-      });
-    } catch (error) {
-      toast.success(t("Thank you for your feedback"), {
-        id: "report-feedback",
-      });
-    }
   };
   const handleRenderHistoryMessage = (message: any[]) => {
     return message.map((item, index) => {
@@ -589,14 +466,6 @@ const PopupAssist = (props: PopupAssistProps) => {
               onClick={() => handleCopyAnswer(item.content)}
             >
               <span className="icon-copy-line"></span>
-            </div>
-          )}
-          {item.role === "assistant" && (
-            <div
-              className="popup-assist-copy-button popup-assist-report-button"
-              onClick={() => handleReportAnswer(item.content, index)}
-            >
-              <span className="icon-report" style={{ fontWeight: 500 }}></span>
             </div>
           )}
           {item.role === "assistant" && index === message.length - 1 && (
@@ -638,7 +507,7 @@ const PopupAssist = (props: PopupAssistProps) => {
       new Blob([JSON.stringify(exportData, null, 2)], {
         type: "application/json;charset=UTF-8",
       }),
-      `KoodoReader-${modeLabel}-Assistant-${bookName}-${dateStr}.json`
+      `KeSach-${modeLabel}-Assistant-${bookName}-${dateStr}.json`
     );
     toast.success(t("Export successful"), { id: "exporting" });
   };
@@ -839,12 +708,6 @@ const PopupAssist = (props: PopupAssistProps) => {
                       className="add-dialog-shelf-list-option"
                     >
                       {t(item.displayName)}
-                      {item.key === "official-ai-assistant-plugin" && (
-                        <span style={{ fontSize: "13px", color: "#f16464" }}>
-                          {" "}
-                          (Pro)
-                        </span>
-                      )}
                     </option>
                   );
                 })}

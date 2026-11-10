@@ -5,7 +5,6 @@ import "./popupDict.css";
 import {
   ConfigService,
   KookitConfig,
-  WordSyncManager,
 } from "../../../assets/lib/kookit-extra-browser.min";
 import Parser from "html-react-parser";
 import DOMPurify from "dompurify";
@@ -14,16 +13,10 @@ import DictHistory from "../../../models/DictHistory";
 import { Trans } from "react-i18next";
 import {
   getFullTranslationTarget,
-  getOfficialDictLang,
-  getWebsiteUrl,
   openExternalUrl,
 } from "../../../utils/common";
 import toast from "react-hot-toast";
 import DatabaseService from "../../../utils/storage/databaseService";
-import {
-  getDictText,
-  getDictionaryStream,
-} from "../../../utils/request/reader";
 import { chatStream } from "../../../utils/request/common";
 import { marked } from "marked";
 import { getIframeDoc } from "../../../utils/reader/docUtil";
@@ -58,7 +51,6 @@ const PopupDict = (props: PopupDictProps) => {
   const originalText = useAppStore((s) => s.reader.originalText);
   const originalSentence = useAppStore((s) => s.reader.originalSentence);
   const plugins = useAppStore((s) => s.manager.plugins);
-  const isAuthed = useAppStore((s) => s.manager.isAuthed);
   const currentBook = useAppStore((s) => s.book.currentBook);
   const handleOpenMenu = useAppStore((s) => s.handleOpenMenu);
   const handleMenuMode = useAppStore((s) => s.handleMenuMode);
@@ -125,46 +117,6 @@ const PopupDict = (props: PopupDictProps) => {
     let bookName = currentBook.name || "";
     let word = new DictHistory(bookKey, text, chapter, sentence);
     await DatabaseService.saveRecord(word, "words");
-    let wordSyncManager = new WordSyncManager(ConfigService);
-    wordSyncManager.syncWordToEudic(text, sentence);
-    wordSyncManager.syncWordToAnki(text, sentence, bookName, chapter, dictText);
-    wordSyncManager.syncWordToMaiMemo(text);
-  };
-
-  const handleDictionaryStream = async (
-    text: string,
-    isFullAnalysis: boolean
-  ) => {
-    try {
-      aiTextAccumulator.current = "";
-      updateState({ aiAnswer: "", isAiWaiting: true, isAiStreaming: true });
-      startUpdateInterval();
-      let res = await getDictionaryStream(
-        text,
-        "auto",
-        getFullTranslationTarget(),
-        originalSentence,
-        isFullAnalysis,
-        (result) => {
-          if (result && result.text) {
-            if (!aiTextAccumulator.current) {
-              updateState({ isAiWaiting: false });
-            }
-            aiTextAccumulator.current += result.text;
-          }
-        }
-      );
-      stopUpdateInterval();
-      aiTextAccumulator.current = "";
-      if (res && res.done) {
-        updateState({ isAiWaiting: false, isAiStreaming: false });
-      }
-    } catch (error) {
-      stopUpdateInterval();
-      aiTextAccumulator.current = "";
-      updateState({ isAiWaiting: false, isAiStreaming: false });
-      console.error(error);
-    }
   };
 
   const handleDict = async (text: string): Promise<string> => {
@@ -232,25 +184,7 @@ const PopupDict = (props: PopupDictProps) => {
         const dictId: string = config.dictId || "";
         if (!dictId) return "";
         dictText = await DictUtil.lookupWord(dictId, text);
-      } else if (
-        isAuthed &&
-        ConfigService.getReaderConfig("isDisableAI") !== "yes" &&
-        ConfigService.getReaderConfig("dictService") ===
-          "official-ai-dict-plugin"
-      ) {
-        dictText = await getDictText(
-          text,
-          ConfigService.getReaderConfig("dictTarget") || "auto",
-          getOfficialDictLang()
-        );
-        if (dictText) {
-          isFullAnalysis = false;
-        }
-      } else if (
-        ConfigService.getReaderConfig("dictService") &&
-        ConfigService.getReaderConfig("dictService") !==
-          "official-ai-dict-plugin"
-      ) {
+      } else if (ConfigService.getReaderConfig("dictService")) {
         let plugin = plugins.find(
           (item) => item.key === ConfigService.getReaderConfig("dictService")
         );
@@ -284,14 +218,6 @@ const PopupDict = (props: PopupDictProps) => {
       } else {
         updateState({ dictText: dictText });
       }
-      if (
-        isAuthed &&
-        ConfigService.getReaderConfig("isDisableAI") !== "yes" &&
-        ConfigService.getReaderConfig("dictService") ===
-          "official-ai-dict-plugin"
-      ) {
-        handleDictionaryStream(text, isFullAnalysis);
-      }
       return dictText;
     } catch (error) {
       toast.error(
@@ -312,9 +238,6 @@ const PopupDict = (props: PopupDictProps) => {
     let originalText = text.replace(/(\r\n|\n|\r)/gm, "");
     updateState({ word: originalText });
     updateState({ prototype: originalText });
-    if (ConfigService.getReaderConfig("isLemmatizeWord") === "yes") {
-      originalText = originalText;
-    }
     if (!stateRef.current.dictService) {
       let pluginList = plugins.filter(
         (item) =>
@@ -324,12 +247,6 @@ const PopupDict = (props: PopupDictProps) => {
         updateState({ dictService: pluginList[0].key });
         ConfigService.setReaderConfig("dictService", pluginList[0].key);
         await new Promise((resolve) => setTimeout(resolve, 100));
-      } else if (isAuthed) {
-        updateState({
-          dictService: "official-ai-dict-plugin",
-          isAddNew: false,
-        });
-        ConfigService.setReaderConfig("dictService", "official-ai-dict-plugin");
       } else {
         updateState({ isAddNew: true });
         return;
@@ -383,21 +300,9 @@ const PopupDict = (props: PopupDictProps) => {
     audioPlayers.forEach((item) => {
       (item as HTMLAudioElement).load();
     });
-    let moreElement = document.querySelector(".dict-learn-more");
-    if (moreElement) {
-      moreElement.addEventListener("click", () => {
-        openExternalUrl(window.learnMoreUrl || getWebsiteUrl());
-      });
-    }
   }, [state.dictText]);
 
   const handleChangeDictService = (dictService: string) => {
-    if (dictService === "official-ai-dict-plugin" && !isAuthed) {
-      toast(t("Please upgrade to Pro to use this feature"));
-      handleSetting(true);
-      handleSettingMode("account");
-      return;
-    }
     updateState({
       dictService: dictService,
       isAddNew: false,
@@ -459,12 +364,6 @@ const PopupDict = (props: PopupDictProps) => {
                     className="add-dialog-shelf-list-option"
                   >
                     {t(item.displayName)}
-                    {item.key === "official-ai-dict-plugin" && (
-                      <span style={{ fontSize: "13px", color: "#f16464" }}>
-                        {" "}
-                        (Pro)
-                      </span>
-                    )}
                   </option>
                 );
               })}
@@ -525,9 +424,7 @@ const PopupDict = (props: PopupDictProps) => {
             maxWidth: props.isDockedRight ? "150px" : "250px",
           }}
         >
-          {ConfigService.getReaderConfig("isLemmatizeWord") === "yes"
-            ? state.prototype
-            : state.word}
+          {state.word}
         </div>
         <div className="dict-original-word">
           <Trans>Prototype</Trans>

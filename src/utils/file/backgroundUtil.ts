@@ -1,10 +1,9 @@
 import { isElectron } from "react-device-detect";
-import { getServerRegion, getStorageLocation } from "../common";
+import { getStorageLocation } from "../common";
 import { ConfigService } from "../../assets/lib/kookit-extra-browser.min";
 import { LocalFileManager } from "./localFile";
 import localforage from "localforage";
 import { Buffer } from "buffer";
-import i18n from "../../i18n";
 // @ts-ignore – no bundled type declarations
 import ColorThief from "color-thief-browser";
 
@@ -203,88 +202,6 @@ class BackgroundUtil {
     ConfigService.deleteListConfig(id, "backgroundList");
   }
 
-  /** Featured backgrounds live on the public storage server, 1-indexed. */
-  static getFeaturedBackgroundId(index: number): string {
-    return `official-background-${index}`;
-  }
-
-  static getFeaturedThumbnailUrl(index: number, isAuthed: boolean): string {
-    const base =
-      getServerRegion() === "china" && isAuthed
-        ? "https://storage.koodoreader.cn"
-        : "https://storage.koodoreader.com";
-    return `${base}/backgrounds/desktop-thumbnail/official-background-${index}.png`;
-  }
-
-  static getFeaturedOriginalUrl(index: number, isAuthed: boolean): string {
-    const base =
-      getServerRegion() === "china" && isAuthed
-        ? "https://storage.koodoreader.cn"
-        : "https://storage.koodoreader.com";
-    return `${base}/backgrounds/desktop/official-background-${index}.png`;
-  }
-
-  /**
-   * Download a featured background into local storage (with progress).
-   * Returns its local data-URL, or null when the download fails.
-   */
-  static async downloadFeaturedBackground(
-    index: number,
-    isAuthed: boolean,
-    onProgress?: (progress: number) => void
-  ): Promise<string | null> {
-    const id = this.getFeaturedBackgroundId(index);
-    const extension = "png";
-    const response = await fetch(this.getFeaturedOriginalUrl(index, isAuthed), {
-      headers: {
-        "Cache-Control": "no-transform",
-        "Accept-Encoding": "identity",
-      },
-    });
-    if (!response.ok) return null;
-
-    const contentLength = Number(response.headers.get("Content-Length") || 0);
-    let arrayBuffer: ArrayBuffer;
-    const reader = response.body?.getReader();
-    if (!reader) {
-      arrayBuffer = await response.arrayBuffer();
-    } else {
-      const chunks: Uint8Array[] = [];
-      let received = 0;
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        if (value) {
-          chunks.push(value);
-          received += value.length;
-          if (contentLength > 0 && onProgress) {
-            onProgress(received / contentLength);
-          }
-        }
-      }
-      const merged = new Uint8Array(received);
-      let offset = 0;
-      for (const chunk of chunks) {
-        merged.set(chunk, offset);
-        offset += chunk.length;
-      }
-      arrayBuffer = merged.buffer;
-    }
-
-    await this.saveImageBuffer(id, arrayBuffer, extension);
-    const base64 = Buffer.from(arrayBuffer).toString("base64");
-    const dataUrl = `data:image/${extension};base64,${base64}`;
-    const { backgroundColor, textColor } =
-      await this.analyzeImageColors(dataUrl);
-    this.saveImageMeta(id, {
-      name: `${i18n.t("Official background")} ${index}`,
-      extension,
-      backgroundColor,
-      textColor,
-    });
-    this.addImageId(id);
-    return dataUrl;
-  }
 }
 
 export default BackgroundUtil;

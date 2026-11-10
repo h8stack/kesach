@@ -1,18 +1,17 @@
 {
-  "name": "koodo-reader",
+  "name": "kesach",
   "main": "main.js",
   "version": "2.4.8",
-  "description": "Koodo Reader is a cross-platform ebook reader",
+  "description": "KeSach is a cross-platform ebook reader",
   "author": {
-    "name": "App by Troye",
-    "email": "feedback@koodoreader.com"
+    "name": "KeSach"
   },
   "engines": {
     "node": ">=22.12.0",
     "npm": ">=6.0.0"
   },
-  "repository": "https://github.com/koodo-reader/koodo-reader",
-  "private": false,
+  "private": true,
+  "packageManager": "yarn@1.22.22",
   "resolutions": {
     "node-gyp": "^10.0.0"
   },
@@ -121,8 +120,8 @@
     "rebuild": "electron-rebuild -f -w better-sqlite3"
   },
   "build": {
-    "appId": "xyz.960960.koodo",
-    "productName": "Koodo Reader",
+    "appId": "app.kesach.reader",
+    "productName": "KeSach",
     "copyright": "Copyright (c) 2020-2025 ${author}",
     "files": [
       "build/**/*",
@@ -133,8 +132,7 @@
       "src/utils/plugins/main/**/*.js",
       "main.js",
       "src/utils/main/**/*.js",
-      "preload.js",
-      "chat-preload.js"
+      "preload.js"
     ],
     "extraResources": [
       {
@@ -146,18 +144,13 @@
       }
     ],
     "protocols": {
-      "name": "KoodoReader",
+      "name": "KeSachReader",
       "schemes": [
-        "koodo-reader"
+        "kesach"
       ]
     },
     "directories": {
       "buildResources": "assets"
-    },
-    "publish": {
-      "provider": "github",
-      "repo": "koodo-reader",
-      "owner": "koodo-reader"
     },
     "buildDependenciesFromSource": false,
     "nodeGypRebuild": false,
@@ -231,7 +224,7 @@
         "ext": "kdz",
         "icon": "assets/icons/epub",
         "role": "Viewer",
-        "mimeType": "application/vnd.koodo.kdz"
+        "mimeType": "application/vnd.kesach.kdz"
       }
     ],
     "extends": null,
@@ -254,10 +247,10 @@
       "darkModeSupport": true,
       "entitlements": "assets/macos/entitlements.mac.plist",
       "entitlementsInherit": "assets/macos/entitlements.mac.plist",
-      "identity": "Liang Guo",
+      "identity": null,
       "gatekeeperAssess": false,
       "hardenedRuntime": true,
-      "notarize": true,
+      "notarize": false,
       "target": [
         {
           "target": "dmg",
@@ -332,12 +325,12 @@
       "artifactName": "${productName}-${version}-${arch}-Portable.${ext}"
     },
     "appx": {
-      "applicationId": "com.koodoreader.electron",
-      "identityName": "AppbyTroye.KoodoReader",
+      "applicationId": "com.kesach.electron",
+      "identityName": "KeSach.Reader",
       "publisher": "CN=0AEAD7C6-DF4A-4D05-8FA0-D816D7DE37FF",
-      "publisherDisplayName": "App by Troye",
+      "publisherDisplayName": "KeSach",
       "artifactName": "${productName}-${version}-${arch}.${ext}",
-      "displayName": "Koodo Reader",
+      "displayName": "KeSach",
       "backgroundColor": "transparent"
     },
     "nsis": {
@@ -348,12 +341,7 @@
       "include": "assets/windows/installer.nsh"
     },
     "snap": {
-      "base": "core22",
-      "publish": [
-        {
-          "provider": "github"
-        }
-      ]
+      "base": "core22"
     }
   },
   "browserslist": {
