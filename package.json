@@ -303,12 +303,6 @@
       "category": "Office",
       "target": [
         {
-          "target": "snap",
-          "arch": [
-            "x64"
-          ]
-        },
-        {
           "target": "deb",
           "arch": [
             "x64"
@@ -347,14 +341,6 @@
       "allowToChangeInstallationDirectory": false,
       "buildUniversalInstaller": false,
       "include": "assets/windows/installer.nsh"
-    },
-    "snap": {
-      "base": "core22",
-      "publish": [
-        {
-          "provider": "github"
-        }
-      ]
     }
   },
   "browserslist": {
