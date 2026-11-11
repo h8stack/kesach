@@ -1,0 +1,6 @@
+{
+  "name": "cpu-features",
+  "version": "0.0.10",
+  "description": "No-op stub; ssh2 works without the optional cpu-features native module",
+  "main": "index.js"
+}
