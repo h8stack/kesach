@@ -99,6 +99,14 @@ jobs:
           API_KEY_ID: ${{ secrets.API_KEY_ID }}
           API_KEY_ISSUER_ID: ${{ secrets.API_KEY_ISSUER_ID }}
 
+      - name: Verify Windows build outputs
+        if: success() && startsWith(matrix.os, 'windows')
+        shell: bash
+        run: |
+          ls -lh dist/*.exe dist/*.zip
+          test -n "$(ls dist/*-Setup.exe 2>/dev/null)" || { echo "::error::NSIS setup installer missing"; exit 1; }
+          test -n "$(ls dist/*-Portable.exe 2>/dev/null)" || { echo "::error::Portable exe missing"; exit 1; }
+
       - name: Upload build artifacts
         # Always expose the installers on the run page, including tag builds
         # (tag builds additionally publish them to GitHub Releases).
