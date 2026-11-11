@@ -1117,5 +1117,16 @@
   "Background opacity": "Độ mờ nền",
   "Enable auto reading": "Tự động cuộn",
   "Auto scrolling speed": "Tốc độ tự động cuộn",
-  "Custom voice plugins are available in the desktop app": "Plugin giọng nói tùy chỉnh chỉ khả dụng trong ứng dụng máy tính"
+  "Custom voice plugins are available in the desktop app": "Plugin giọng nói tùy chỉnh chỉ khả dụng trong ứng dụng máy tính",
+  "Books/Documents": "Sách/Tài liệu",
+  "Deleted Books/Documents": "Thùng rác",
+  "Edit Book/Document": "Chỉnh sửa sách/tài liệu",
+  "Book/Document name": "Tên sách/tài liệu",
+  "Book/Document not exists": "Sách/tài liệu không tồn tại",
+  "Book/Document page": "Trang {{count}}",
+  "Books/Documents read": "Sách/tài liệu đã đọc",
+  "Search in the Book/Document": "Tìm kiếm trong sách/tài liệu",
+  "Book/Document Detail": "Chi tiết sách/tài liệu",
+  "Book/Document path": "Đường dẫn sách/tài liệu",
+  "Book/Document layout": "Bố cục sách/tài liệu"
 }
