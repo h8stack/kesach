@@ -2,12 +2,16 @@ name: Build/release
 
 on:
   push:
+    tags:
+      - "v*"
+  release:
+    types: [published]
   workflow_dispatch:
 
 concurrency:
-  # Cancel superseded branch builds, but never interrupt a tag release.
+  # A tag and its release can fire together; keep one run per ref.
   group: release-${{ github.ref }}
-  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
+  cancel-in-progress: true
 
 permissions:
   contents: write
