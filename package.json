@@ -341,7 +341,7 @@
       "backgroundColor": "transparent"
     },
     "nsis": {
-      "artifactName": "${productName}-${version}-${arch}.${ext}",
+      "artifactName": "${productName}-${version}-${arch}-Setup.${ext}",
       "oneClick": true,
       "allowToChangeInstallationDirectory": false,
       "buildUniversalInstaller": false,
