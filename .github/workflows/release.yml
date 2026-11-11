@@ -94,6 +94,8 @@ jobs:
           # macOS notarization API key
           API_KEY_ID: ${{ secrets.API_KEY_ID }}
           API_KEY_ISSUER_ID: ${{ secrets.API_KEY_ISSUER_ID }}
+          # Allow re-runs to update an already-published release.
+          EP_GH_IGNORE_TIME: "true"
 
       - name: Verify Windows build outputs
         if: success() && startsWith(matrix.os, 'windows')

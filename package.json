@@ -1,7 +1,7 @@
 {
   "name": "kesach",
   "main": "main.js",
-  "version": "2.4.8",
+  "version": "2.4.9",
   "description": "KeSach is a cross-platform ebook reader",
   "author": {
     "name": "h8stack",
