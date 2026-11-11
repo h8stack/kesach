@@ -126,7 +126,8 @@
     "productName": "KeSach",
     "publish": {
       "provider": "github",
-      "publishAutoUpdate": false
+      "publishAutoUpdate": false,
+      "releaseType": "release"
     },
     "copyright": "Copyright (c) 2020-2025 ${author}",
     "beforeBuild": "scripts/before-build.js",
