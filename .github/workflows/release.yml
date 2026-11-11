@@ -91,6 +91,9 @@ jobs:
           # If the commit is tagged with a version (e.g. "v1.0.0"),
           # release the app after building
           release: ${{ startsWith(github.ref, 'refs/tags/v') }}
+          # Branch runs must not publish: four matrix jobs would race on the
+          # same draft release. Only v* tags publish.
+          args: ${{ startsWith(github.ref, 'refs/tags/v') && '' || '--publish never' }}
         env:
           # macOS notarization API key
           API_KEY_ID: ${{ secrets.API_KEY_ID }}
