@@ -1,6 +1,13 @@
 name: Build/release
 
-on: workflow_dispatch
+on:
+  push:
+  workflow_dispatch:
+
+concurrency:
+  # Cancel superseded branch builds, but never interrupt a tag release.
+  group: release-${{ github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
 
 permissions:
   contents: write
