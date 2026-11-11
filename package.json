@@ -344,7 +344,12 @@
       "include": "assets/windows/installer.nsh"
     },
     "snap": {
-      "base": "core22"
+      "base": "core22",
+      "publish": [
+        {
+          "provider": "github"
+        }
+      ]
     }
   },
   "browserslist": {
