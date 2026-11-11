@@ -4,8 +4,10 @@
   "version": "2.4.8",
   "description": "KeSach is a cross-platform ebook reader",
   "author": {
-    "name": "KeSach"
+    "name": "h8stack",
+    "email": "h8stack@users.noreply.github.com"
   },
+  "homepage": "https://github.com/h8stack/kesach",
   "engines": {
     "node": ">=22.12.0",
     "npm": ">=6.0.0"
@@ -116,13 +118,14 @@
     "dev": "concurrently \"cross-env BROWSER=none npm start\" \"wait-on http://127.0.0.1:3000/ && nodemon --watch main.js --watch src/utils/plugins/main --ext js --exec electron .\"",
     "release": "electron-builder",
     "prerelease": "yarn build",
-    "postinstall": "node scripts/patch-nan.js && electron-builder install-app-deps",
+    "postinstall": "node scripts/patch-nan.js && electron-rebuild -f -w better-sqlite3",
     "rebuild": "electron-rebuild -f -w better-sqlite3"
   },
   "build": {
     "appId": "app.kesach.reader",
     "productName": "KeSach",
     "copyright": "Copyright (c) 2020-2025 ${author}",
+    "beforeBuild": "scripts/before-build.js",
     "files": [
       "build/**/*",
       "node_modules/**/*",

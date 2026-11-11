@@ -2,6 +2,9 @@ name: Build/release
 
 on: workflow_dispatch
 
+permissions:
+  contents: write
+
 jobs:
   release:
     runs-on: ${{ matrix.os }}
@@ -11,6 +14,8 @@ jobs:
 
     # Platforms to build on/for
     strategy:
+      # One failing platform must not cancel the others.
+      fail-fast: false
       matrix:
         os: [macos-26, ubuntu-22.04, windows-2022, ubuntu-24.04-arm]
 
@@ -22,6 +27,13 @@ jobs:
         uses: actions/setup-node@v6
         with:
           node-version: 22
+
+      - name: Install Linux arm64 build tooling
+        if: startsWith(matrix.os, 'ubuntu-24.04-arm')
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential python3 make g++ ruby-full libffi-dev zlib1g-dev liblzma-dev pkg-config
+          sudo gem install --no-document fpm
 
       - name: Install dependencies
         run: yarn install
@@ -38,12 +50,6 @@ jobs:
         run: |
           sudo apt update
           sudo apt-get install gcc-multilib g++-multilib
-      - name: Install FPM
-        if: startsWith(matrix.os, 'ubuntu-24.04-arm')
-        run: |
-          sudo apt update
-          sudo apt-get install -y ruby-full build-essential zlib1g-dev liblzma-dev
-          sudo gem install --no-document fpm
       - name: Prepare for app notarization (macOS)
         if: startsWith(matrix.os, 'macos')
         # Import Apple API key for app notarization on macOS
@@ -59,33 +65,17 @@ jobs:
         run: echo "USE_HARD_LINKS=false" >> $GITHUB_ENV
       - name: Modify package.json for dev branch
         if: github.ref == 'refs/heads/dev'
-        shell: bash
-        run: |
-          if [[ "${{ matrix.os }}" == "windows-22" ]]; then
-            powershell -Command "(Get-Content package.json) -replace '\"productName\": \"Koodo Reader\"', '\"productName\": \"Koodo Reader DEV\"' | Set-Content package.json"
-          else
-            sed -i.bak 's/"productName": "Koodo Reader"/"productName": "Koodo Reader DEV"/' package.json
-          fi
+        run: node scripts/ci-patch-package.js dev
       - name: Modify package.json for Linux arm64 build
         if: startsWith(matrix.os, 'ubuntu-24.04-arm')
-        run: |
-          jq '.build.linux.target = [
-            {
-              "target": "deb",
-              "arch": ["arm64"]
-            },
-            {
-              "target": "AppImage", 
-              "arch": ["arm64"]
-            }
-          ]' package.json > package.json.tmp && mv package.json.tmp package.json
+        run: node scripts/ci-patch-package.js linux-arm64
       - name: Build/release Electron app
         uses: samuelmeuli/action-electron-builder@v1.6.0
         with:
           build_script_name: "build"
           # GitHub token, automatically provided to the action
           # (No need to define this secret in the repo settings)
-          github_token: ${{ secrets.github_token }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
 
           # macOS code signing certificate
           mac_certs: ${{ secrets.MAC_CERTS }}
