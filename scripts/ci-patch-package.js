@@ -5,6 +5,7 @@
  * Modes:
  *   dev          -> suffix productName with " DEV" for the dev branch
  *   linux-arm64  -> restrict the Linux targets to arm64 deb + AppImage
+ *   set-version <tag> -> set package version from a tag (v2.4.9 -> 2.4.9)
  */
 const fs = require("fs");
 const path = require("path");
@@ -21,6 +22,13 @@ if (mode === "dev") {
     { target: "deb", arch: ["arm64"] },
     { target: "AppImage", arch: ["arm64"] },
   ];
+} else if (mode === "set-version") {
+  const version = (process.argv[3] || "").replace(/^v/, "");
+  if (!/^\d+\.\d+\.\d+(?:[-+].+)?$/.test(version)) {
+    console.error(`Invalid version: ${process.argv[3] || ""}`);
+    process.exit(1);
+  }
+  pkg.version = version;
 } else {
   console.error(`Unknown mode: ${mode}`);
   process.exit(1);

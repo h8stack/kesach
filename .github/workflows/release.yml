@@ -13,18 +13,22 @@ permissions:
   contents: write
 
 jobs:
-  release:
+  build:
     runs-on: ${{ matrix.os }}
 
-    env:
-      SNAPCRAFT_STORE_CREDENTIALS: ${{ secrets.SNAPCRAFT_TOKEN }}
-
-    # Platforms to build on/for
     strategy:
       # One failing platform must not cancel the others.
       fail-fast: false
       matrix:
-        os: [macos-26, ubuntu-22.04, windows-2022, ubuntu-24.04-arm]
+        include:
+          - os: macos-26
+            platform: mac
+          - os: ubuntu-22.04
+            platform: linux
+          - os: windows-2022
+            platform: win
+          - os: ubuntu-24.04-arm
+            platform: linux
 
     steps:
       - name: Check out Git repository
@@ -48,54 +52,27 @@ jobs:
       - name: TypeScript type check
         run: npx tsc --noEmit --noUnusedLocals false --noUnusedParameters false
 
-      - name: Install Gcc
-        if: startsWith(matrix.os, 'ubuntu-22.04')
-        run: |
-          sudo apt update
-          sudo apt-get install gcc-multilib g++-multilib
-      - name: Prepare for app notarization (macOS)
-        if: startsWith(matrix.os, 'macos')
-        # Import Apple API key for app notarization on macOS
-        run: |
-          mkdir -p ~/private_keys/
-          echo ${{ github.ref }}
-          echo '${{ secrets.API_KEY }}' > ~/private_keys/AuthKey_${{ secrets.API_KEY_ID }}.p8
-          brew install python-setuptools
       - name: Set environment variable USE_SYSTEM_FPM
         if: startsWith(matrix.os, 'ubuntu-24.04-arm')
         run: echo "USE_SYSTEM_FPM=true" >> $GITHUB_ENV
       - name: Set environment variable USE_HARD_LINKS
         run: echo "USE_HARD_LINKS=false" >> $GITHUB_ENV
+
+      - name: Set version from tag
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: node scripts/ci-patch-package.js set-version "${{ github.ref_name }}"
       - name: Modify package.json for dev branch
         if: github.ref == 'refs/heads/dev'
         run: node scripts/ci-patch-package.js dev
       - name: Modify package.json for Linux arm64 build
         if: startsWith(matrix.os, 'ubuntu-24.04-arm')
         run: node scripts/ci-patch-package.js linux-arm64
-      - name: Build/release Electron app
-        uses: samuelmeuli/action-electron-builder@v1.6.0
-        with:
-          build_script_name: "build"
-          # GitHub token, automatically provided to the action
-          # (No need to define this secret in the repo settings)
-          github_token: ${{ secrets.GITHUB_TOKEN }}
 
-          # macOS code signing certificate
-          mac_certs: ${{ secrets.MAC_CERTS }}
-          mac_certs_password: ${{ secrets.MAC_CERTS_PASSWORD }}
-
-          # If the commit is tagged with a version (e.g. "v1.0.0"),
-          # release the app after building
-          release: ${{ startsWith(github.ref, 'refs/tags/v') }}
-          # Branch runs must not publish: four matrix jobs would race on the
-          # same draft release. Only v* tags publish.
-          args: ${{ startsWith(github.ref, 'refs/tags/v') && '' || '--publish never' }}
-        env:
-          # macOS notarization API key
-          API_KEY_ID: ${{ secrets.API_KEY_ID }}
-          API_KEY_ISSUER_ID: ${{ secrets.API_KEY_ISSUER_ID }}
-          # Allow re-runs to update an already-published release.
-          EP_GH_IGNORE_TIME: "true"
+      - name: Build Electron app
+        shell: bash
+        run: |
+          yarn build
+          npx electron-builder --${{ matrix.platform }} --publish never
 
       - name: Verify Windows build outputs
         if: success() && startsWith(matrix.os, 'windows')
@@ -106,18 +83,40 @@ jobs:
           test -n "$(ls dist/*-Portable.exe 2>/dev/null)" || { echo "::error::Portable exe missing"; exit 1; }
 
       - name: Upload build artifacts
-        # Always expose the installers on the run page, including tag builds
-        # (tag builds additionally publish them to GitHub Releases).
         if: success()
         uses: actions/upload-artifact@v4
         with:
           name: kesach-${{ matrix.os }}
           path: |
             dist/*.exe
+            !dist/*.__uninstaller.exe
             dist/*.zip
             dist/*.dmg
             dist/*.deb
             dist/*.rpm
-            dist/*.snap
             dist/*.AppImage
           if-no-files-found: warn
+
+  publish:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: List release files
+        run: ls -lh artifacts
+
+      - name: Publish GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: artifacts/*
+          draft: false
+          prerelease: false
+          overwrite_files: true
+          generate_release_notes: true
