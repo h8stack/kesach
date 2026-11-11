@@ -49,9 +49,24 @@ jobs:
         run: npx tsc --noEmit --noUnusedLocals false --noUnusedParameters false
 
       - name: Install Snapcraft
-        uses: samuelmeuli/action-snapcraft@v3
         # Only install Snapcraft on Ubuntu
         if: startsWith(matrix.os, 'ubuntu-22.04')
+        timeout-minutes: 10
+        run: |
+          if command -v snapcraft >/dev/null 2>&1; then
+            snapcraft --version
+            exit 0
+          fi
+          for attempt in 1 2 3 4 5; do
+            if sudo snap install snapcraft --classic --channel stable; then
+              snapcraft --version
+              exit 0
+            fi
+            echo "Snapcraft install failed (attempt $attempt); retrying in 10s..."
+            sleep 10
+          done
+          echo "::error::Failed to install snapcraft after 5 attempts"
+          exit 1
       - name: Install Gcc
         if: startsWith(matrix.os, 'ubuntu-22.04')
         run: |
